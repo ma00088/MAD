@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/theme.dart';
 import 'payment_screen.dart';
 
@@ -11,6 +13,7 @@ class SeatSelectionScreen extends StatefulWidget {
   final String time;
   final int passengers;
   final String? promoCode;
+  final String? scheduleId;
 
   const SeatSelectionScreen({
     Key? key,
@@ -22,6 +25,7 @@ class SeatSelectionScreen extends StatefulWidget {
     required this.time,
     required this.passengers,
     this.promoCode,
+    this.scheduleId,
   }) : super(key: key);
 
   @override
@@ -29,25 +33,150 @@ class SeatSelectionScreen extends StatefulWidget {
 }
 
 class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
-  int _currentStep = 2; // Step 2: Seat Selection
+  int _currentStep = 2;
   List<int> _selectedSeats = [];
   
-  // Mock seat layout (40 seats)
-  final List<List<int>> _seatLayout = [
-    [1, 2, 3, 4],
-    [5, 6, 7, 8],
-    [9, 10, 11, 12],
-    [13, 14, 15, 16],
-    [17, 18, 19, 20],
-    [21, 22, 23, 24],
-    [25, 26, 27, 28],
-    [29, 30, 31, 32],
-    [33, 34, 35, 36],
-    [37, 38, 39, 40],
-  ];
+  // Loading states
+  bool _isLoading = true;
+  List<int> _occupiedSeats = [];
+  Map<String, dynamic>? _scheduleData;
+  int _totalSeats = 40;
+  double _seatPrice = 25.0;
   
-  // Mock occupied seats
-  final List<int> _occupiedSeats = [3, 4, 7, 8, 12, 15, 16, 23, 24, 31, 32];
+  // Error state for seat loading
+  bool _hasLoadError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSeatAvailability();
+  }
+
+  // Helper function to safely convert any value to int
+  int _toInt(dynamic value, [int defaultValue = 0]) {
+    if (value == null) return defaultValue;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? defaultValue;
+    return defaultValue;
+  }
+
+  // Helper function to safely convert any value to double
+  double _toDouble(dynamic value, [double defaultValue = 0.0]) {
+    if (value == null) return defaultValue;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? defaultValue;
+    return defaultValue;
+  }
+
+  Future<void> _loadSeatAvailability() async {
+    setState(() {
+      _isLoading = true;
+      _hasLoadError = false;
+    });
+
+    try {
+      print('🟡 Loading seat availability for schedule: ${widget.scheduleId}');
+      
+      if (widget.scheduleId == null) {
+        print('⚠️ No scheduleId provided');
+        setState(() {
+          _isLoading = false;
+          _hasLoadError = true;
+        });
+        return;
+      }
+
+      // Load schedule details
+      DocumentSnapshot scheduleDoc = await FirebaseFirestore.instance
+          .collection('schedules')
+          .doc(widget.scheduleId)
+          .get();
+
+      if (!scheduleDoc.exists) {
+        print('⚠️ Schedule not found');
+        setState(() {
+          _isLoading = false;
+          _hasLoadError = true;
+        });
+        return;
+      }
+
+      _scheduleData = scheduleDoc.data() as Map<String, dynamic>;
+      print('✅ Schedule found');
+      
+      // Get total seats from bus reference
+      if (_scheduleData!['busId'] != null) {
+        DocumentReference busRef = _scheduleData!['busId'] as DocumentReference;
+        DocumentSnapshot busDoc = await busRef.get();
+        if (busDoc.exists) {
+          Map<String, dynamic> busData = busDoc.data() as Map<String, dynamic>;
+          _totalSeats = _toInt(busData['totalSeats'], 40);
+          _seatPrice = _toDouble(busData['price'], 25.0);
+          print('✅ Bus details: Total seats: $_totalSeats, Price: $_seatPrice');
+        }
+      }
+
+      // Load bookings for this schedule on this date
+      String dateStr = '${widget.date.year}-${widget.date.month.toString().padLeft(2, '0')}-${widget.date.day.toString().padLeft(2, '0')}';
+      print('🔍 Checking bookings for date: $dateStr');
+      
+      // Query ONLY the seats field to maintain privacy
+      QuerySnapshot bookingsSnapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('scheduleId', isEqualTo: FirebaseFirestore.instance.doc('schedules/${widget.scheduleId}'))
+          .where('travelDate', isEqualTo: dateStr)
+          .where('bookingStatus', isNotEqualTo: 'cancelled')
+          .get();
+
+      print('📊 Found ${bookingsSnapshot.docs.length} existing bookings');
+
+      // Collect all occupied seats
+      Set<int> occupiedSeats = {};
+      for (var doc in bookingsSnapshot.docs) {
+        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        if (data['seats'] != null && data['seats'] is List) {
+          List<dynamic> seatsList = data['seats'] as List;
+          for (var seat in seatsList) {
+            int seatNum = _toInt(seat);
+            if (seatNum > 0) {
+              occupiedSeats.add(seatNum);
+            }
+          }
+        }
+      }
+      
+      setState(() {
+        _occupiedSeats = occupiedSeats.toList()..sort();
+      });
+      print('✅ Occupied seats: $_occupiedSeats');
+      
+      // If no seats are occupied, show a message
+      if (_occupiedSeats.isEmpty) {
+        print('ℹ️ All seats are available');
+      }
+      
+    } catch (e) {
+      print('❌ Error loading seat availability: $e');
+      setState(() {
+        _hasLoadError = true;
+      });
+      
+      // Show error message but don't allow booking to proceed
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to verify seat availability. Please try again.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -190,79 +319,141 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
           ),
           SizedBox(height: 16),
           
-          // Seat Layout
-          Expanded(
-            child: Container(
-              padding: EdgeInsets.all(16),
-              child: GridView.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1,
-                ),
-                itemCount: 40,
-                itemBuilder: (context, index) {
-                  int seatNumber = index + 1;
-                  bool isOccupied = _occupiedSeats.contains(seatNumber);
-                  bool isSelected = _selectedSeats.contains(seatNumber);
-                  
-                  return GestureDetector(
-                    onTap: isOccupied
-                        ? null
-                        : () {
-                            setState(() {
-                              if (isSelected) {
-                                _selectedSeats.remove(seatNumber);
-                              } else if (_selectedSeats.length < widget.passengers) {
-                                _selectedSeats.add(seatNumber);
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('You can only select ${widget.passengers} seat(s)'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            });
-                          },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isOccupied
-                            ? Colors.grey[300]
-                            : isSelected
-                                ? AppColors.primary
-                                : Colors.green[50],
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: isOccupied
-                              ? Colors.grey
-                              : isSelected
-                                  ? AppColors.primary
-                                  : Colors.green,
-                          width: isSelected ? 2 : 1,
+          // Loading Indicator or Seat Layout or Error
+          _isLoading
+              ? Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          'Loading seat availability...',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : _hasLoadError
+                  ? Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 64,
+                              color: Colors.red,
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'Unable to Load Seats',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Please go back and try again',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: Text('Go Back'),
+                            ),
+                          ],
                         ),
                       ),
-                      child: Center(
-                        child: Text(
-                          seatNumber.toString(),
-                          style: TextStyle(
-                            color: isOccupied
-                                ? Colors.grey
-                                : isSelected
-                                    ? Colors.white
-                                    : Colors.green[800],
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                    )
+                  : Expanded(
+                      child: Container(
+                        padding: EdgeInsets.all(16),
+                        child: GridView.builder(
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 4,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            childAspectRatio: 1,
                           ),
+                          itemCount: _totalSeats,
+                          itemBuilder: (context, index) {
+                            int seatNumber = index + 1;
+                            bool isOccupied = _occupiedSeats.contains(seatNumber);
+                            bool isSelected = _selectedSeats.contains(seatNumber);
+                            
+                            return GestureDetector(
+                              onTap: isOccupied
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        if (isSelected) {
+                                          _selectedSeats.remove(seatNumber);
+                                        } else if (_selectedSeats.length < widget.passengers) {
+                                          _selectedSeats.add(seatNumber);
+                                        } else {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('You can only select ${widget.passengers} seat(s)'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                        }
+                                      });
+                                    },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: isOccupied
+                                      ? Colors.grey[300]
+                                      : isSelected
+                                          ? AppColors.primary
+                                          : Colors.green[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isOccupied
+                                        ? Colors.grey
+                                        : isSelected
+                                            ? AppColors.primary
+                                            : Colors.green,
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    seatNumber.toString(),
+                                    style: TextStyle(
+                                      color: isOccupied
+                                          ? Colors.grey
+                                          : isSelected
+                                              ? Colors.white
+                                              : Colors.green[800],
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
-          ),
           
           // Bottom Bar with Price and Continue
           Container(
@@ -292,7 +483,7 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
                         ),
                       ),
                       Text(
-                        '\$${_selectedSeats.length * 25}',
+                        '\$${(_selectedSeats.length * _seatPrice).toStringAsFixed(2)}',
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -304,7 +495,9 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
                 ),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _selectedSeats.length == widget.passengers
+                    onPressed: _selectedSeats.length == widget.passengers && 
+                             !_isLoading && 
+                             !_hasLoadError
                         ? () {
                             Navigator.push(
                               context,
@@ -318,16 +511,10 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
                                   time: widget.time,
                                   passengers: widget.passengers,
                                   selectedSeats: _selectedSeats,
-                                  totalAmount: _selectedSeats.length * 25,
+                                  totalAmount: (_selectedSeats.length * _seatPrice).toInt(),
                                   promoCode: widget.promoCode,
+                                  scheduleId: widget.scheduleId,
                                 ),
-                              ),
-                            );
-                            // Navigate to payment
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Proceeding to payment...'),
-                                backgroundColor: Colors.green,
                               ),
                             );
                           }
@@ -341,7 +528,9 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
                       padding: EdgeInsets.symmetric(vertical: 16),
                     ),
                     child: Text(
-                      'Continue',
+                      _selectedSeats.length == widget.passengers
+                          ? 'Continue'
+                          : 'Select ${widget.passengers} seat(s)',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

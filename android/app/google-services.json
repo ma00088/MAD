@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "874233266187",
+    "project_id": "utb-bus-app",
+    "storage_bucket": "utb-bus-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:874233266187:android:728791be7ba40b426d870e",
+        "android_client_info": {
+          "package_name": "com.example.project"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDur--F8TS9ppehwyRt8a-0UDDYkvGkB-k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

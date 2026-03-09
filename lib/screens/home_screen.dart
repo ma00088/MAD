@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../providers/booking_provider.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../utils/theme.dart';
@@ -7,24 +8,66 @@ import 'bookings_screen.dart';
 import 'ticket_screen.dart';
 import 'profile_screen.dart';
 import 'ticket_booking_screen.dart';
+import 'login_screen.dart';
+import '../models/booking_model.dart';
 
 class HomeScreen extends StatefulWidget {
+  final int? initialTab;
+  
+  const HomeScreen({Key? key, this.initialTab}) : super(key: key);
+
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0;
+  late int _currentIndex;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  
+  // User data from Firebase
+  String userName = "Loading...";
+  String userEmail = "";
+  bool hasSubscription = false;
 
-  final screens = [
-    HomePageContent(),
-    BookingsScreen(),
-    TicketScreen(),
-    ProfileScreen(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialTab ?? 0;
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      setState(() {
+        userName = user.displayName ?? user.email?.split('@')[0] ?? 'Student';
+        userEmail = user.email ?? '';
+        // You can load subscription status from Firestore here
+        hasSubscription = true; // This should come from Firestore
+      });
+    }
+  }
+
+  // Method to switch tabs (useful for navigation from other screens)
+  void switchToTab(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final screens = [
+      HomePageContent(
+        userName: userName,
+        userEmail: userEmail,
+        hasSubscription: hasSubscription,
+      ),
+      BookingsScreen(),
+      TicketScreen(),
+      ProfileScreen(),
+    ];
+
     return Scaffold(
       body: screens[_currentIndex],
       bottomNavigationBar: CustomBottomNavBar(
@@ -40,12 +83,53 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // ========== MAIN HOME PAGE CONTENT ==========
-class HomePageContent extends StatelessWidget {
-  // Demo user data - will come from provider/API later
-  final String userName = "Maryam Yusuf";
-  final String userType = "Bahraini Student";
-  final bool hasSubscription = true; // Toggle this to test with/without subscription
+class HomePageContent extends StatefulWidget {
+  final String userName;
+  final String userEmail;
+  final bool hasSubscription;
 
+  const HomePageContent({
+    Key? key,
+    required this.userName,
+    required this.userEmail,
+    required this.hasSubscription,
+  }) : super(key: key);
+
+  @override
+  _HomePageContentState createState() => _HomePageContentState();
+}
+
+class _HomePageContentState extends State<HomePageContent> {
+  // Get user initials for avatar
+  String get _userInitials {
+    if (widget.userName.isNotEmpty && widget.userName != "Loading...") {
+      List<String> names = widget.userName.split(' ');
+      if (names.length > 1) {
+        return '${names[0][0]}${names[1][0]}'.toUpperCase();
+      }
+      return widget.userName[0].toUpperCase();
+    }
+    return 'U';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Use WidgetsBinding to ensure this runs after build is complete
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadUserBookings();
+    });
+  }
+
+  Future<void> _loadUserBookings() async {
+    final provider = Provider.of<BookingProvider>(context, listen: false);
+    final user = FirebaseAuth.instance.currentUser;
+    
+    if (user != null) {
+      await provider.loadUserBookings(user.uid);
+    }
+  }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -70,7 +154,7 @@ class HomePageContent extends StatelessWidget {
               ),
               child: Center(
                 child: Text(
-                  'MY',
+                  _userInitials,
                   style: TextStyle(
                     color: AppColors.primary,
                     fontSize: 16,
@@ -86,14 +170,14 @@ class HomePageContent extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Good Morning 👋',
+                    _getGreeting(),
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 12,
                     ),
                   ),
                   Text(
-                    userName,
+                    widget.userName,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -128,28 +212,32 @@ class HomePageContent extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: 12),
-                Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Stack(
-                    children: [
-                      Icon(Icons.notifications_outlined, color: Colors.white, size: 22),
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: Colors.yellow,
-                            shape: BoxShape.circle,
+                // Notification bell with logout option on long press
+                GestureDetector(
+                  onLongPress: () => _showLogoutDialog(context),
+                  child: Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Stack(
+                      children: [
+                        Icon(Icons.notifications_outlined, color: Colors.white, size: 22),
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: Colors.yellow,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -162,7 +250,7 @@ class HomePageContent extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Show Subscription Card ONLY if user has active subscription
-            if (hasSubscription) _buildSubscriptionCard(),
+            if (widget.hasSubscription) _buildSubscriptionCard(),
             
             SizedBox(height: 20),
             
@@ -231,7 +319,12 @@ class HomePageContent extends StatelessWidget {
                       end: Alignment.bottomRight,
                       colors: [Color(0xFFFF8C42), Color(0xFFFFB347)],
                     ),
-                    onTap: () {},
+                    onTap: () {
+                      // Navigate to schedule view
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Schedule view coming soon!')),
+                      );
+                    },
                   ),
                   _buildBeautifulBox(
                     icon: Icons.card_membership_outlined,
@@ -242,7 +335,12 @@ class HomePageContent extends StatelessWidget {
                       end: Alignment.bottomRight,
                       colors: [Color(0xFF2ECC71), Color(0xFF4CD964)],
                     ),
-                    onTap: () {},
+                    onTap: () {
+                      // Navigate to subscription plans
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Subscription plans coming soon!')),
+                      );
+                    },
                   ),
                   _buildBeautifulBox(
                     icon: Icons.help_outline,
@@ -253,7 +351,9 @@ class HomePageContent extends StatelessWidget {
                       end: Alignment.bottomRight,
                       colors: [Color(0xFF9B59B6), Color(0xFFC07CF0)],
                     ),
-                    onTap: () {},
+                    onTap: () {
+                      _showContactDialog(context);
+                    },
                     showContact: true,
                   ),
                 ],
@@ -262,8 +362,25 @@ class HomePageContent extends StatelessWidget {
             
             SizedBox(height: 24),
             
-            // Upcoming Trip Section
-            _buildUpcomingTrip(),
+            // Upcoming Trip Section - Now using Consumer to get real data
+            Consumer<BookingProvider>(
+              builder: (context, provider, child) {
+                if (provider.isLoading) {
+                  return Center(child: CircularProgressIndicator());
+                }
+                
+                // Get upcoming trips from provider
+                var upcomingTrips = provider.userBookings.where((booking) => 
+                  booking.isUpcoming && booking.status != 'cancelled'
+                ).toList();
+                
+                if (upcomingTrips.isEmpty) {
+                  return _buildNoUpcomingTrip();
+                }
+                
+                return _buildUpcomingTrip(upcomingTrips.first);
+              },
+            ),
             
             SizedBox(height: 24),
             
@@ -275,6 +392,17 @@ class HomePageContent extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _getGreeting() {
+    var hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'Good Morning 👋';
+    } else if (hour < 17) {
+      return 'Good Afternoon 👋';
+    } else {
+      return 'Good Evening 👋';
+    }
   }
 
   // ========== BEAUTIFUL SUBSCRIPTION CARD ==========
@@ -654,8 +782,71 @@ class HomePageContent extends StatelessWidget {
     );
   }
 
+  // ========== NO UPCOMING TRIP ==========
+  Widget _buildNoUpcomingTrip() {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 15,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.directions_bus,
+            size: 50,
+            color: Colors.grey[300],
+          ),
+          SizedBox(height: 12),
+          Text(
+            'No Upcoming Trips',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Book your first bus ride now!',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => TicketBookingScreen()),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: Text('Book a Trip'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ========== UPCOMING TRIP SECTION ==========
-  Widget _buildUpcomingTrip() {
+  Widget _buildUpcomingTrip(BookingModel trip) {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 20),
       padding: EdgeInsets.all(20),
@@ -716,7 +907,7 @@ class HomePageContent extends StatelessWidget {
                     ),
                     SizedBox(width: 4),
                     Text(
-                      'TOMORROW',
+                      trip.isUpcoming ? 'UPCOMING' : 'TODAY',
                       style: TextStyle(
                         color: AppColors.accentYellow,
                         fontSize: 11,
@@ -780,7 +971,7 @@ class HomePageContent extends StatelessWidget {
                               ),
                               SizedBox(height: 2),
                               Text(
-                                'City Centre',
+                                trip.fromLocation,
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
@@ -788,7 +979,7 @@ class HomePageContent extends StatelessWidget {
                                 ),
                               ),
                               Text(
-                                '07:30 AM',
+                                trip.departureTime,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: AppColors.primary,
@@ -811,7 +1002,7 @@ class HomePageContent extends StatelessWidget {
                               ),
                               SizedBox(height: 2),
                               Text(
-                                'UTB Campus',
+                                trip.toLocation,
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
@@ -819,7 +1010,7 @@ class HomePageContent extends StatelessWidget {
                                 ),
                               ),
                               Text(
-                                '08:15 AM',
+                                trip.arrivalTime,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: AppColors.primary,
@@ -842,8 +1033,8 @@ class HomePageContent extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _buildTripDetailItem(Icons.directions_bus, 'Bus', 'B-12'),
-                          _buildTripDetailItem(Icons.event_seat, 'Seat', '12A'),
+                          _buildTripDetailItem(Icons.directions_bus, 'Bus', trip.busId),
+                          _buildTripDetailItem(Icons.event_seat, 'Seat', trip.seats.join(', ')),
                           _buildTripDetailItem(Icons.timer, 'Duration', '45 min'),
                         ],
                       ),
@@ -859,7 +1050,12 @@ class HomePageContent extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () {},
+              onPressed: () {
+                // Track bus live
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Live tracking coming soon!')),
+                );
+              },
               icon: Icon(Icons.location_searching, size: 18),
               label: Text('Track Bus Live'),
               style: ElevatedButton.styleFrom(
@@ -1116,6 +1312,100 @@ class HomePageContent extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  // ========== CONTACT DIALOG ==========
+  void _showContactDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'Contact Support',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                leading: Icon(Icons.phone, color: Colors.green),
+                title: Text('Phone'),
+                subtitle: Text('1777-2024'),
+                onTap: () {},
+              ),
+              ListTile(
+                leading: Icon(Icons.email, color: AppColors.primary),
+                title: Text('Email'),
+                subtitle: Text('support@utb.edu.bh'),
+                onTap: () {},
+              ),
+              ListTile(
+                leading: Icon(Icons.chat, color: Colors.blue),
+                title: Text('Live Chat'),
+                subtitle: Text('Available 24/7'),
+                onTap: () {},
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ========== LOGOUT DIALOG ==========
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'Logout',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Text('Are you sure you want to logout?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await FirebaseAuth.instance.signOut();
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => LoginScreen()),
+                  (route) => false,
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Logout'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

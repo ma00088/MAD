@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/theme.dart';
+import '../providers/booking_provider.dart';
+import 'home_screen.dart';
 
 class PaymentScreen extends StatefulWidget {
   final String tripType;
@@ -12,6 +17,7 @@ class PaymentScreen extends StatefulWidget {
   final List<int> selectedSeats;
   final int totalAmount;
   final String? promoCode;
+  final String? scheduleId;
 
   const PaymentScreen({
     Key? key,
@@ -25,6 +31,7 @@ class PaymentScreen extends StatefulWidget {
     required this.selectedSeats,
     required this.totalAmount,
     this.promoCode,
+    this.scheduleId,
   }) : super(key: key);
 
   @override
@@ -32,9 +39,11 @@ class PaymentScreen extends StatefulWidget {
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  int _currentStep = 3; // Step 3: Payment
-  String _selectedPaymentMethod = 'benefit'; // Default to Benefit Pay
+  int _currentStep = 3;
+  String _selectedPaymentMethod = 'benefit';
   bool _termsAccepted = false;
+  bool _isProcessing = false;
+  String? _errorMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +67,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       ),
       body: Column(
         children: [
-          // ========== 3-STEP PROGRESS BAR ==========
+          // Progress Bar
           Container(
             padding: EdgeInsets.all(20),
             color: Colors.white,
@@ -73,50 +82,63 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
           ),
           
-          // ========== MAIN CONTENT ==========
+          // Error Message (if any)
+          if (_errorMessage != null) ...[
+            Container(
+              margin: EdgeInsets.all(16),
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          
+          // Main Content
           Expanded(
             child: SingleChildScrollView(
               padding: EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // ========== TRIP SUMMARY CARD ==========
                   _buildTripSummaryCard(),
-                  
                   SizedBox(height: 16),
-                  
-                  // ========== PRICE BREAKDOWN CARD ==========
                   _buildPriceBreakdownCard(),
-                  
                   SizedBox(height: 16),
-                  
-                  // ========== PAYMENT METHODS ==========
                   _buildPaymentMethods(),
-                  
                   SizedBox(height: 16),
-                  
-                  // ========== BENEFIT PAY (Default) ==========
                   _buildBenefitPay(),
-                  
                   SizedBox(height: 16),
-                  
-                  // ========== TERMS ==========
                   _buildTermsAndSave(),
-                  
                   SizedBox(height: 24),
                 ],
               ),
             ),
           ),
           
-          // ========== BOTTOM PAY BUTTON ==========
+          // Bottom Pay Button
           _buildBottomPayButton(),
         ],
       ),
     );
   }
 
-  // ========== STEP PROGRESS WIDGETS ==========
-  
+  // Step Progress Widgets
   Widget _buildStep(int stepNumber, String label, bool isActive) {
     return Column(
       children: [
@@ -162,8 +184,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // ========== TRIP SUMMARY CARD ==========
-  
+  // Trip Summary Card
   Widget _buildTripSummaryCard() {
     return Container(
       padding: EdgeInsets.all(16),
@@ -307,15 +328,33 @@ class _PaymentScreenState extends State<PaymentScreen> {
           // Seats
           Row(
             children: [
+              Icon(Icons.event_seat, size: 14, color: AppColors.primary),
               SizedBox(width: 8),
-
+              Text(
+                'Seats: ',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
               Expanded(
                 child: Wrap(
                   spacing: 4,
                   children: widget.selectedSeats.map((seat) {
                     return Container(
                       padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        seat.toString(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     );
                   }).toList(),
                 ),
@@ -327,13 +366,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // ========== PRICE BREAKDOWN CARD ==========
-  
+  // Price Breakdown Card
   Widget _buildPriceBreakdownCard() {
     double seatPrice = 25.0;
     double subtotal = widget.passengers * seatPrice;
-    double discount = widget.promoCode != null ? subtotal * 0.2 : 0; // 20% discount if promo applied
-    double vat = (subtotal - discount) * 0.1; // 10% VAT
+    double discount = widget.promoCode != null ? subtotal * 0.2 : 0;
+    double vat = (subtotal - discount) * 0.1;
     double total = subtotal - discount + vat;
     
     return Container(
@@ -459,8 +497,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // ========== PAYMENT METHODS ==========
-  
+  // Payment Methods
   Widget _buildPaymentMethods() {
     return Container(
       padding: EdgeInsets.all(16),
@@ -524,6 +561,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       onChanged: (val) {
         setState(() {
           _selectedPaymentMethod = val!;
+          _errorMessage = null; // Clear any previous errors
         });
       },
       activeColor: AppColors.primary,
@@ -554,8 +592,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // ========== BENEFIT PAY ==========
-  
+  // Benefit Pay
   Widget _buildBenefitPay() {
     if (_selectedPaymentMethod != 'benefit') return SizedBox.shrink();
     
@@ -607,7 +644,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
           SizedBox(height: 12),
           ElevatedButton.icon(
-            onPressed: () {},
+            onPressed: _isProcessing ? null : () => _processPayment(),
             icon: Icon(Icons.phone_android, size: 16),
             label: Text('Open Benefit App'),
             style: ElevatedButton.styleFrom(
@@ -624,8 +661,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // ========== APPLE PAY ==========
-  
+  // Apple Pay
   Widget _buildApplePay() {
     if (_selectedPaymentMethod != 'apple') return SizedBox.shrink();
     
@@ -701,8 +737,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // ========== TERMS ==========
-  
+  // Terms
   Widget _buildTermsAndSave() {
     return Container(
       padding: EdgeInsets.all(16),
@@ -724,6 +759,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             onChanged: (val) {
               setState(() {
                 _termsAccepted = val ?? false;
+                _errorMessage = null; // Clear any previous errors
               });
             },
             activeColor: AppColors.primary,
@@ -761,8 +797,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // ========== BOTTOM PAY BUTTON ==========
-  
+  // Bottom Pay Button
   Widget _buildBottomPayButton() {
     double seatPrice = 25.0;
     double subtotal = widget.passengers * seatPrice;
@@ -811,7 +846,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
             Expanded(
               child: ElevatedButton(
-                onPressed: _termsAccepted ? _processPayment : null,
+                onPressed: _termsAccepted && !_isProcessing ? _processPayment : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
@@ -820,13 +855,22 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ),
                   padding: EdgeInsets.symmetric(vertical: 16),
                 ),
-                child: Text(
-                  'Pay Now',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                child: _isProcessing
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(
+                        'Pay Now',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
           ],
@@ -835,9 +879,23 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // ========== PAYMENT PROCESSING ==========
-  
-  void _processPayment() {
+  // Payment Processing
+  Future<void> _processPayment() async {
+    // Clear any previous errors
+    setState(() {
+      _errorMessage = null;
+      _isProcessing = true;
+    });
+
+    // Validate inputs
+    if (widget.scheduleId == null) {
+      setState(() {
+        _errorMessage = 'Schedule information is missing. Please go back and try again.';
+        _isProcessing = false;
+      });
+      return;
+    }
+
     // Show loading dialog
     showDialog(
       context: context,
@@ -887,98 +945,140 @@ class _PaymentScreenState extends State<PaymentScreen> {
       },
     );
 
-    // Simulate payment processing
-    Future.delayed(Duration(seconds: 3), () {
-      Navigator.pop(context); // Close loading dialog
+    try {
+      // Get current user
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('Please log in to complete your booking');
+      }
+
+      // Create booking in Firebase
+      final provider = Provider.of<BookingProvider>(context, listen: false);
       
-      // Show success dialog
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Colors.green, Colors.green.withOpacity(0.8)],
+      bool success = await provider.createBooking(
+        userId: user.uid,
+        scheduleId: widget.scheduleId!,
+        seats: widget.selectedSeats,
+        amount: widget.totalAmount.toDouble(),
+        promoCode: widget.promoCode,
+      );
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      if (success) {
+        // Show success dialog
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext context) {
+              return Dialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
                 ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.check,
-                      color: Colors.white,
-                      size: 40,
+                child: Container(
+                  padding: EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Colors.green, Colors.green.withOpacity(0.8)],
                     ),
                   ),
-                  SizedBox(height: 16),
-                  Text(
-                    'Payment Successful!',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Your booking has been confirmed',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.white70,
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'Booking ID: UTB${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.popUntil(context, ModalRoute.withName('/'));
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.green,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
                         ),
-                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Icon(
+                          Icons.check,
+                          color: Colors.white,
+                          size: 40,
+                        ),
                       ),
-                      child: Text(
-                        'View My Ticket',
+                      SizedBox(height: 16),
+                      Text(
+                        'Payment Successful!',
                         style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Your booking has been confirmed',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white70,
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'Booking ID: UTB${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
+                      SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context); // Close success dialog
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(builder: (context) => HomeScreen(initialTab: 1)),
+                              (route) => false,
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.green,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: Text(
+                            'View My Bookings',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           );
-        },
-      );
-    });
+        }
+      } else {
+        throw Exception('Failed to create booking. Please try again.');
+      }
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted) {
+        Navigator.pop(context);
+        
+        // Show error message
+        setState(() {
+          _errorMessage = e.toString().replaceAll('Exception: ', '');
+          _isProcessing = false;
+        });
+      }
+    }
   }
 }

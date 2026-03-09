@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/theme.dart';
 import 'home_screen.dart';
+import 'signup_screen.dart';
+import 'admin/admin_login_screen.dart'; // Add this import
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -11,8 +15,166 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  
   bool _obscurePassword = true;
   bool _rememberMe = false;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signIn() async {
+    // Validate form
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      // Attempt to sign in with Firebase Auth
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      // Check if email is verified (optional - you can enable/disable this)
+      // if (!userCredential.user!.emailVerified) {
+      //   await userCredential.user!.sendEmailVerification();
+      //   _showDialog(
+      //     title: 'Email Not Verified',
+      //     message: 'Please verify your email before logging in. A new verification email has been sent.',
+      //     isError: true,
+      //   );
+      //   setState(() => _isLoading = false);
+      //   return;
+      // }
+
+      // Save remember me preference if needed
+      if (_rememberMe) {
+        // You can save this in SharedPreferences if needed
+      }
+
+      // Navigate to home screen on success
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => HomeScreen()),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      String message = 'An error occurred';
+      
+      switch (e.code) {
+        case 'user-not-found':
+          message = 'No user found with this email. Please sign up.';
+          break;
+        case 'wrong-password':
+          message = 'Incorrect password. Please try again.';
+          break;
+        case 'invalid-email':
+          message = 'Invalid email address format.';
+          break;
+        case 'user-disabled':
+          message = 'This account has been disabled. Please contact support.';
+          break;
+        case 'too-many-requests':
+          message = 'Too many failed attempts. Please try again later.';
+          break;
+        case 'network-request-failed':
+          message = 'Network error. Please check your internet connection.';
+          break;
+        default:
+          message = 'Login failed: ${e.message}';
+      }
+
+      setState(() {
+        _errorMessage = message;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'An unexpected error occurred. Please try again.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    if (_emailController.text.isEmpty) {
+      _showDialog(
+        title: 'Email Required',
+        message: 'Please enter your email address to reset your password.',
+        isError: true,
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(
+        email: _emailController.text.trim(),
+      );
+      
+      _showDialog(
+        title: 'Password Reset Email Sent',
+        message: 'Check your email for instructions to reset your password.',
+        isError: false,
+      );
+    } on FirebaseAuthException catch (e) {
+      String message = 'Failed to send reset email';
+      
+      if (e.code == 'user-not-found') {
+        message = 'No user found with this email address.';
+      }
+      
+      _showDialog(
+        title: 'Error',
+        message: message,
+        isError: true,
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _showDialog({required String title, required String message, required bool isError}) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            color: isError ? Colors.red : Colors.green,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +242,34 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               SizedBox(height: 30),
               
+              // Error Message (if any)
+              if (_errorMessage != null) ...[
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: Colors.red, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 16),
+              ],
+              
               // Divider
               Row(
                 children: [
@@ -107,6 +297,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     // Student ID / Email Field
                     TextFormField(
                       controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      enabled: !_isLoading,
                       decoration: InputDecoration(
                         labelText: 'Student ID / Email',
                         hintText: 'Enter your student ID or email',
@@ -118,10 +311,19 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: AppColors.primary, width: 2),
                         ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.red, width: 1),
+                        ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your student ID or email';
+                        }
+                        // Basic email validation
+                        if (!value.contains('@') || !value.contains('.')) {
+                          // Allow student IDs without @ for testing
+                          // return 'Please enter a valid email';
                         }
                         return null;
                       },
@@ -132,6 +334,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
+                      textInputAction: TextInputAction.done,
+                      enabled: !_isLoading,
+                      onFieldSubmitted: (_) => _signIn(),
                       decoration: InputDecoration(
                         labelText: 'Password',
                         hintText: 'Enter your password',
@@ -154,10 +359,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: AppColors.primary, width: 2),
                         ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.red, width: 1),
+                        ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your password';
+                        }
+                        if (value.length < 6) {
+                          return 'Password must be at least 6 characters';
                         }
                         return null;
                       },
@@ -172,7 +384,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           children: [
                             Checkbox(
                               value: _rememberMe,
-                              onChanged: (value) {
+                              onChanged: _isLoading ? null : (value) {
                                 setState(() {
                                   _rememberMe = value ?? false;
                                 });
@@ -181,14 +393,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             Text(
                               'Remember me',
-                              style: TextStyle(color: AppColors.textSecondary),
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                              ),
                             ),
                           ],
                         ),
                         TextButton(
-                          onPressed: () {
-                            // Forgot password logic
-                          },
+                          onPressed: _isLoading ? null : _resetPassword,
                           child: Text(
                             'Forgot Password?',
                             style: TextStyle(
@@ -206,15 +418,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: () {
-                          if (_formKey.currentState!.validate()) {
-                            // Navigate to home screen on successful login
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (context) => HomeScreen()),
-                            );
-                          }
-                        },
+                        onPressed: _isLoading ? null : _signIn,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
@@ -223,13 +427,22 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           elevation: 2,
                         ),
-                        child: Text(
-                          'Sign In',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        child: _isLoading
+                            ? SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(
+                                'Sign In',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                       ),
                     ),
                     SizedBox(height: 24),
@@ -253,17 +466,33 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     SizedBox(height: 24),
                     
-                    // Social Login Buttons
+                    // Social Login Buttons (disabled for now)
                     _buildSocialButton(
                       icon: Icons.g_mobiledata,
                       label: 'Continue with Google',
                       color: Colors.black87,
+                      onPressed: () {
+                        // Google Sign-In will be implemented later
+                        _showDialog(
+                          title: 'Coming Soon',
+                          message: 'Google Sign-In will be available soon!',
+                          isError: false,
+                        );
+                      },
                     ),
                     SizedBox(height: 12),
                     _buildSocialButton(
                       icon: Icons.window,
                       label: 'Continue with Microsoft',
                       color: Colors.black87,
+                      onPressed: () {
+                        // Microsoft Sign-In will be implemented later
+                        _showDialog(
+                          title: 'Coming Soon',
+                          message: 'Microsoft Sign-In will be available soon!',
+                          isError: false,
+                        );
+                      },
                     ),
                     SizedBox(height: 24),
                     
@@ -276,18 +505,40 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(color: AppColors.textSecondary),
                         ),
                         GestureDetector(
-                          onTap: () {
-                            // Navigate to sign up
+                          onTap: _isLoading ? null : () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => SignUpScreen()),
+                            );
                           },
                           child: Text(
                             'Sign Up',
                             style: TextStyle(
                               color: AppColors.primary,
                               fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.underline,
                             ),
                           ),
                         ),
                       ],
+                    ),
+                    
+                    // ===== ADMIN LOGIN LINK (ADDED HERE) =====
+                    SizedBox(height: 16),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => AdminLoginScreen()),
+                        );
+                      },
+                      child: Text(
+                        'Admin Login →',
+                        style: TextStyle(
+                          color: AppColors.primary.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -303,14 +554,13 @@ class _LoginScreenState extends State<LoginScreen> {
     required IconData icon,
     required String label,
     required Color color,
+    required VoidCallback onPressed,
   }) {
     return SizedBox(
       width: double.infinity,
       height: 50,
       child: OutlinedButton.icon(
-        onPressed: () {
-          // Social login logic
-        },
+        onPressed: _isLoading ? null : onPressed,
         icon: Icon(icon, color: color),
         label: Text(
           label,

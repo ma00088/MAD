@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/theme.dart';
-import 'seat_selection_screen.dart'; // We'll create this next
+import '../providers/booking_provider.dart';
+import '../models/bus_model.dart';
+import 'seat_selection_screen.dart';
 
 class TicketBookingScreen extends StatefulWidget {
   @override
@@ -22,18 +27,62 @@ class _TicketBookingScreenState extends State<TicketBookingScreen> {
   bool _hasPromoCode = false;
   final TextEditingController _promoController = TextEditingController();
   
-  // Sample locations (from your previous requirements)
-  final List<String> _locations = [
-    'Isa Town',
-    'Riffa',
-    'Hamad Town',
-    'City Centre Bahrain',
-    'UTB Campus'
-  ];
+  // Loading state for search
+  bool _isSearching = false;
+  
+  // Locations from Firebase (will be loaded dynamically)
+  List<String> _locations = [];
   
   // Available times
   final List<String> _availableTimes = ['07:00 AM', '11:00 AM', '03:00 PM'];
   
+  @override
+  void initState() {
+    super.initState();
+    _loadLocationsFromFirebase();
+  }
+  
+  // Load unique locations from Firestore routes
+  Future<void> _loadLocationsFromFirebase() async {
+    try {
+      // Get all routes from Firestore
+      QuerySnapshot routesSnapshot = await FirebaseFirestore.instance
+          .collection('routes')
+          .get();
+      
+      Set<String> uniqueLocations = {};
+      
+      for (var doc in routesSnapshot.docs) {
+        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        
+        // Add source location
+        if (data['source'] != null) {
+          uniqueLocations.add(data['source'].toString());
+        }
+        
+        // Add destination location
+        if (data['destination'] != null) {
+          uniqueLocations.add(data['destination'].toString());
+        }
+      }
+      
+      // Convert to list and sort
+      List<String> sortedLocations = uniqueLocations.toList()..sort();
+      
+      setState(() {
+        _locations = sortedLocations.isNotEmpty 
+            ? sortedLocations 
+            : ['Isa Town', 'Riffa', 'Hamad Town', 'City Centre Bahrain', 'UTB Campus'];
+      });
+    } catch (e) {
+      print('Error loading locations: $e');
+      // Fallback to default locations
+      setState(() {
+        _locations = ['Isa Town', 'Riffa', 'Hamad Town', 'City Centre Bahrain', 'UTB Campus'];
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -173,6 +222,7 @@ class _TicketBookingScreenState extends State<TicketBookingScreen> {
                     onChanged: (value) {
                       setState(() {
                         _selectedFrom = value;
+                        _selectedTo = null; // Reset destination when source changes
                       });
                     },
                   ),
@@ -182,7 +232,9 @@ class _TicketBookingScreenState extends State<TicketBookingScreen> {
                   _buildDropdownField(
                     label: 'To',
                     value: _selectedTo,
-                    items: _locations.where((loc) => loc != _selectedFrom).toList(),
+                    items: _selectedFrom != null
+                        ? _locations.where((loc) => loc != _selectedFrom).toList()
+                        : _locations,
                     onChanged: (value) {
                       setState(() {
                         _selectedTo = value;
@@ -368,12 +420,12 @@ class _TicketBookingScreenState extends State<TicketBookingScreen> {
                   
                   SizedBox(height: 30),
                   
-                  // Search Button
+                  // Search Button with loading state
                   SizedBox(
                     width: double.infinity,
                     height: 55,
                     child: ElevatedButton(
-                      onPressed: _isFormValid() ? _searchTrips : null,
+                      onPressed: _isFormValid() && !_isSearching ? _searchTrips : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
@@ -382,13 +434,29 @@ class _TicketBookingScreenState extends State<TicketBookingScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: Text(
-                        'Search for Trips',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      child: _isSearching
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                                SizedBox(width: 12),
+                                Text('Searching...'),
+                              ],
+                            )
+                          : Text(
+                              'Search for Trips',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -583,27 +651,130 @@ class _TicketBookingScreenState extends State<TicketBookingScreen> {
         (_tripType == 'oneway' || (_tripType == 'roundtrip' && _returnDate != null));
   }
 
-  void _searchTrips() {
-    // Navigate to seat selection screen with the search criteria
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SeatSelectionScreen(
-          tripType: _tripType,
-          fromLocation: _selectedFrom!,
-          toLocation: _selectedTo!,
-          date: _selectedDate!,
-          returnDate: _returnDate,
-          time: _selectedTime!,
-          passengers: _passengers,
-          promoCode: _hasPromoCode ? _promoController.text : null,
-        ),
-      ),
-    );
-    
-    // Update progress to step 2
+  // ========== FIXED SEARCH TRIPS METHOD ==========
+  Future<void> _searchTrips() async {
     setState(() {
-      _currentStep = 2;
+      _isSearching = true;
     });
+
+    try {
+      print('=== SEARCH DEBUG ===');
+      print('From: $_selectedFrom');
+      print('To: $_selectedTo');
+      print('Time: $_selectedTime');
+      print('Date: $_selectedDate');
+      print('Day of week: ${_selectedDate?.weekday}'); // 1=Mon, 2=Tue, etc.
+      
+      // Get the provider to load available buses
+      final provider = Provider.of<BookingProvider>(context, listen: false);
+      
+      // Use the method that filters by time AND date
+      await provider.loadAvailableBusesWithTime(
+        _selectedFrom!,
+        _selectedTo!,
+        _selectedTime!,
+        _selectedDate!,
+      );
+
+      print('Total buses found after filter: ${provider.availableBuses.length}');
+
+      // Check if any buses are available
+      if (provider.availableBuses.isEmpty) {
+        print('NO BUSES FOUND MATCHING CRITERIA');
+        _showNoBusesDialog();
+        setState(() {
+          _isSearching = false;
+        });
+        return;
+      }
+
+      // Navigate to seat selection screen with the search criteria
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SeatSelectionScreen(
+            tripType: _tripType,
+            fromLocation: _selectedFrom!,
+            toLocation: _selectedTo!,
+            date: _selectedDate!,
+            returnDate: _returnDate,
+            time: _selectedTime!,
+            passengers: _passengers,
+            promoCode: _hasPromoCode ? _promoController.text : null,
+            scheduleId: provider.availableBuses.first.id,
+          ),
+        ),
+      ).then((_) {
+        // When returning from seat selection, update step
+        setState(() {
+          _currentStep = 2;
+          _isSearching = false;
+        });
+      });
+    } catch (e) {
+      print('Error searching trips: $e');
+      _showErrorDialog('Failed to search for trips. Please try again.');
+      setState(() {
+        _isSearching = false;
+      });
+    }
+  }
+
+  // ========== DIALOG METHODS ==========
+  
+  void _showNoBusesDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'No Buses Found',
+            style: TextStyle(
+              color: AppColors.primary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Text(
+            'No buses available for this route on the selected date and time. Please try different options.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'Error',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
