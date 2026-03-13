@@ -10,6 +10,8 @@ import 'profile_screen.dart';
 import 'ticket_booking_screen.dart';
 import 'login_screen.dart';
 import '../models/booking_model.dart';
+// Add this import at the top
+import 'chatbot_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final int? initialTab;
@@ -138,6 +140,17 @@ class _HomePageContentState extends State<HomePageContent> {
         backgroundColor: AppColors.primary, // Red bar at top
         elevation: 0,
         toolbarHeight: 80,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.support_agent, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ChatbotScreen()),
+              );
+            },
+          ),
+        ],
         title: Row(
           children: [
             // Profile Avatar with gradient

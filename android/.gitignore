@@ -12,3 +12,8 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+assets/dialog_flow_auth.json
