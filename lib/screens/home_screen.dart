@@ -311,8 +311,9 @@ class _HomePageContentState extends State<HomePageContent> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (hasActiveSubscription)
-                  _buildSubscriptionCard(snapshot.data),
+                hasActiveSubscription
+                    ? _buildSubscriptionCard(snapshot.data)
+                    : SizedBox.shrink(),
 
                 SizedBox(height: 20),
 
@@ -344,7 +345,7 @@ class _HomePageContentState extends State<HomePageContent> {
                 ),
                 SizedBox(height: 16),
 
-                Padding(
+                Container(
                   padding: EdgeInsets.symmetric(horizontal: 20),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
@@ -357,81 +358,82 @@ class _HomePageContentState extends State<HomePageContent> {
                         crossAxisSpacing: 16,
                         childAspectRatio: crossAxisCount == 4 ? 1.0 : 1.2,
                         children: [
-                      _buildBeautifulBox(
-                        icon: Icons.confirmation_number_outlined,
-                        title: 'Buy Ticket',
-                        description: 'One-day passes',
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFFD12149), Color(0xFFFF6B6B)],
-                        ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => TicketBookingScreen(),
+                          _buildBeautifulBox(
+                            icon: Icons.confirmation_number_outlined,
+                            title: 'Buy Ticket',
+                            description: 'One-day passes',
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFFD12149), Color(0xFFFF6B6B)],
                             ),
-                          );
-                        },
-                      ),
-                      _buildBeautifulBox(
-                        icon: Icons.schedule_outlined,
-                        title: 'View Schedule',
-                        description: 'Bus timings',
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFFFF8C42), Color(0xFFFFB347)],
-                        ),
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Schedule view coming soon!'),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => TicketBookingScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildBeautifulBox(
+                            icon: Icons.schedule_outlined,
+                            title: 'View Schedule',
+                            description: 'Bus timings',
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFFFF8C42), Color(0xFFFFB347)],
                             ),
-                          );
-                        },
-                      ),
-                      _buildBeautifulBox(
-                        icon: Icons.card_membership_outlined,
-                        title: 'Subscribe',
-                        description: 'Monthly plans',
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF2ECC71), Color(0xFF4CD964)],
-                        ),
-                        onTap: () async {
-                          final result = await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  SubscriptionPage(isRenewal: false),
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Schedule view coming soon!'),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildBeautifulBox(
+                            icon: Icons.card_membership_outlined,
+                            title: 'Subscribe',
+                            description: 'Monthly plans',
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF2ECC71), Color(0xFF4CD964)],
                             ),
-                          );
+                            onTap: () async {
+                              final result = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      SubscriptionPage(isRenewal: false),
+                                ),
+                              );
 
-                          if (result == true) {
-                            widget.onSubscriptionChanged();
-                          }
-                        },
-                      ),
-                      _buildBeautifulBox(
-                        icon: Icons.help_outline,
-                        title: 'Get Help',
-                        description: 'Support 24/7',
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF9B59B6), Color(0xFFC07CF0)],
-                        ),
-                        onTap: () {
-                          _showContactDialog(context);
-                        },
-                        showContact: true,
-                      ),
-                    ],
-                  );
-                },
+                              if (result == true) {
+                                widget.onSubscriptionChanged();
+                              }
+                            },
+                          ),
+                          _buildBeautifulBox(
+                            icon: Icons.help_outline,
+                            title: 'Get Help',
+                            description: 'Support 24/7',
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF9B59B6), Color(0xFFC07CF0)],
+                            ),
+                            onTap: () {
+                              _showContactDialog(context);
+                            },
+                            showContact: true,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
 
                 SizedBox(height: 24),

@@ -802,25 +802,18 @@ class _PopularBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: const Color.fromARGB(0, 255, 255, 255),
+        borderRadius: BorderRadius.circular(22),
       ),
       child: const Text(
-        'MOST POPULAR',
+        '',
         style: TextStyle(
-          color: Colors.white,
-          fontSize: 10,
+          color: Color.fromARGB(0, 255, 255, 255),
+          fontSize: 1,
           fontWeight: FontWeight.bold,
-          letterSpacing: 0.5,
+          letterSpacing: 0.6,
         ),
       ),
     );
