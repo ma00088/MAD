@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   // New color scheme
-  static const Color primaryRed = Color(0xFFD12149);   // Main red color
-  static const Color textGray = Color(0xFF454744);     // Text color
+  static const Color primaryRed = Color(0xFFD12149); // Main red color
+  static const Color textGray = Color(0xFF454744); // Text color
   static const Color accentYellow = Color(0xFFFFC107); // Loading bar yellow
-  
+
   static ThemeData lightTheme = ThemeData(
     primaryColor: primaryRed,
     scaffoldBackgroundColor: Colors.grey[50],
@@ -40,10 +40,13 @@ class AppTheme {
 }
 
 class AppColors {
-  static const Color primary = Color(0xFFD12149);      // Main red
-  static const Color textPrimary = Color(0xFF454744);   // Dark gray text
-  static const Color textSecondary = Color(0xFF666666); // Lighter gray
-  static const Color accentYellow = Color(0xFFFFC107);  // Yellow for loading
+  static const Color primary = Color(0xFFDC2626);
+  static const Color primaryLight = Color(0xFFEF4444);
+  static const Color primaryDark = Color(0xFFB91C1C);
+  static const Color textPrimary = Color(0xFF1E293B);
+  static const Color textSecondary = Color(0xFF64748B);
+  static const Color accentRedLight = Color(0xFFFEE2E2);
+  static const Color accentYellow = Color(0xFFFFC107);
   static const Color background = Color(0xFFF5F5F5);
   static const Color cardBackground = Colors.white;
   static const Color success = Color(0xFF27AE60);

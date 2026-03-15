@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/booking_provider.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../utils/theme.dart';
@@ -9,13 +10,13 @@ import 'ticket_screen.dart';
 import 'profile_screen.dart';
 import 'ticket_booking_screen.dart';
 import 'login_screen.dart';
-import '../models/booking_model.dart';
-// Add this import at the top
+import 'subscription_page.dart';
 import 'chatbot_screen.dart';
+import '../models/booking_model.dart';
 
 class HomeScreen extends StatefulWidget {
   final int? initialTab;
-  
+
   const HomeScreen({Key? key, this.initialTab}) : super(key: key);
 
   @override
@@ -25,7 +26,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late int _currentIndex;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  
+
   // User data from Firebase
   String userName = "Loading...";
   String userEmail = "";
@@ -41,16 +42,44 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadUserData() async {
     User? user = _auth.currentUser;
     if (user != null) {
-      setState(() {
-        userName = user.displayName ?? user.email?.split('@')[0] ?? 'Student';
-        userEmail = user.email ?? '';
-        // You can load subscription status from Firestore here
-        hasSubscription = true; // This should come from Firestore
-      });
+      try {
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        if (userDoc.exists) {
+          Map<String, dynamic>? userData =
+              userDoc.data() as Map<String, dynamic>?;
+          setState(() {
+            userName =
+                user.displayName ?? user.email?.split('@')[0] ?? 'Student';
+            userEmail = user.email ?? '';
+            hasSubscription = userData?['hasSubscription'] ?? false;
+          });
+        } else {
+          setState(() {
+            userName =
+                user.displayName ?? user.email?.split('@')[0] ?? 'Student';
+            userEmail = user.email ?? '';
+            hasSubscription = false;
+          });
+        }
+      } catch (e) {
+        print('Error loading user data: $e');
+        setState(() {
+          userName = user.displayName ?? user.email?.split('@')[0] ?? 'Student';
+          userEmail = user.email ?? '';
+          hasSubscription = false;
+        });
+      }
     }
   }
 
-  // Method to switch tabs (useful for navigation from other screens)
+  void refreshUserData() {
+    _loadUserData();
+  }
+
   void switchToTab(int index) {
     setState(() {
       _currentIndex = index;
@@ -64,6 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
         userName: userName,
         userEmail: userEmail,
         hasSubscription: hasSubscription,
+        onSubscriptionChanged: refreshUserData,
       ),
       BookingsScreen(),
       TicketScreen(),
@@ -84,17 +114,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ========== MAIN HOME PAGE CONTENT ==========
 class HomePageContent extends StatefulWidget {
   final String userName;
   final String userEmail;
   final bool hasSubscription;
+  final VoidCallback onSubscriptionChanged;
 
   const HomePageContent({
     Key? key,
     required this.userName,
     required this.userEmail,
     required this.hasSubscription,
+    required this.onSubscriptionChanged,
   }) : super(key: key);
 
   @override
@@ -102,7 +133,6 @@ class HomePageContent extends StatefulWidget {
 }
 
 class _HomePageContentState extends State<HomePageContent> {
-  // Get user initials for avatar
   String get _userInitials {
     if (widget.userName.isNotEmpty && widget.userName != "Loading...") {
       List<String> names = widget.userName.split(' ');
@@ -114,10 +144,20 @@ class _HomePageContentState extends State<HomePageContent> {
     return 'U';
   }
 
+  Stream<DocumentSnapshot> _getUserSubscriptionStream() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      return FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .snapshots();
+    }
+    return Stream.empty();
+  }
+
   @override
   void initState() {
     super.initState();
-    // Use WidgetsBinding to ensure this runs after build is complete
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUserBookings();
     });
@@ -126,18 +166,18 @@ class _HomePageContentState extends State<HomePageContent> {
   Future<void> _loadUserBookings() async {
     final provider = Provider.of<BookingProvider>(context, listen: false);
     final user = FirebaseAuth.instance.currentUser;
-    
+
     if (user != null) {
       await provider.loadUserBookings(user.uid);
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        backgroundColor: AppColors.primary, // Red bar at top
+        backgroundColor: AppColors.primary,
         elevation: 0,
         toolbarHeight: 80,
         actions: [
@@ -153,7 +193,6 @@ class _HomePageContentState extends State<HomePageContent> {
         ],
         title: Row(
           children: [
-            // Profile Avatar with gradient
             Container(
               width: 45,
               height: 45,
@@ -177,17 +216,13 @@ class _HomePageContentState extends State<HomePageContent> {
               ),
             ),
             SizedBox(width: 12),
-            // Greeting and Name
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     _getGreeting(),
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                   Text(
                     widget.userName,
@@ -200,7 +235,6 @@ class _HomePageContentState extends State<HomePageContent> {
                 ],
               ),
             ),
-            // Student Badge and Notifications
             Row(
               children: [
                 Container(
@@ -225,7 +259,6 @@ class _HomePageContentState extends State<HomePageContent> {
                   ),
                 ),
                 SizedBox(width: 12),
-                // Notification bell with logout option on long press
                 GestureDetector(
                   onLongPress: () => _showLogoutDialog(context),
                   child: Container(
@@ -236,7 +269,11 @@ class _HomePageContentState extends State<HomePageContent> {
                     ),
                     child: Stack(
                       children: [
-                        Icon(Icons.notifications_outlined, color: Colors.white, size: 22),
+                        Icon(
+                          Icons.notifications_outlined,
+                          color: Colors.white,
+                          size: 22,
+                        ),
                         Positioned(
                           top: 0,
                           right: 0,
@@ -258,151 +295,174 @@ class _HomePageContentState extends State<HomePageContent> {
           ],
         ),
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Show Subscription Card ONLY if user has active subscription
-            if (widget.hasSubscription) _buildSubscriptionCard(),
-            
-            SizedBox(height: 20),
-            
-            // Quick Actions Section Header
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Quick Actions',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {},
-                    child: Text(
-                      'View All',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w500,
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: _getUserSubscriptionStream(),
+        builder: (context, snapshot) {
+          bool hasActiveSubscription = widget.hasSubscription;
+
+          if (snapshot.hasData &&
+              snapshot.data != null &&
+              snapshot.data!.exists) {
+            final data = snapshot.data!.data() as Map<String, dynamic>?;
+            hasActiveSubscription = data?['hasSubscription'] ?? false;
+          }
+
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (hasActiveSubscription)
+                  _buildSubscriptionCard(snapshot.data),
+
+                SizedBox(height: 20),
+
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Quick Actions',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
-                    ),
+                      TextButton(
+                        onPressed: () {},
+                        child: Text(
+                          'View All',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                SizedBox(height: 16),
+
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: GridView.count(
+                    shrinkWrap: true,
+                    physics: NeverScrollableScrollPhysics(),
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 16,
+                    crossAxisSpacing: 16,
+                    childAspectRatio: 1.0,
+                    children: [
+                      _buildBeautifulBox(
+                        icon: Icons.confirmation_number_outlined,
+                        title: 'Buy Ticket',
+                        description: 'One-day passes',
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFFD12149), Color(0xFFFF6B6B)],
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => TicketBookingScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildBeautifulBox(
+                        icon: Icons.schedule_outlined,
+                        title: 'View Schedule',
+                        description: 'Bus timings',
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFFFF8C42), Color(0xFFFFB347)],
+                        ),
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Schedule view coming soon!'),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildBeautifulBox(
+                        icon: Icons.card_membership_outlined,
+                        title: 'Subscribe',
+                        description: 'Monthly plans',
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF2ECC71), Color(0xFF4CD964)],
+                        ),
+                        onTap: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  SubscriptionPage(isRenewal: false),
+                            ),
+                          );
+
+                          if (result == true) {
+                            widget.onSubscriptionChanged();
+                          }
+                        },
+                      ),
+                      _buildBeautifulBox(
+                        icon: Icons.help_outline,
+                        title: 'Get Help',
+                        description: 'Support 24/7',
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF9B59B6), Color(0xFFC07CF0)],
+                        ),
+                        onTap: () {
+                          _showContactDialog(context);
+                        },
+                        showContact: true,
+                      ),
+                    ],
+                  ),
+                ),
+
+                SizedBox(height: 24),
+
+                Consumer<BookingProvider>(
+                  builder: (context, provider, child) {
+                    if (provider.isLoading) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+
+                    var upcomingTrips = provider.userBookings
+                        .where(
+                          (booking) =>
+                              booking.isUpcoming &&
+                              booking.status != 'cancelled',
+                        )
+                        .toList();
+
+                    if (upcomingTrips.isEmpty) {
+                      return _buildNoUpcomingTrip();
+                    }
+
+                    return _buildUpcomingTrip(upcomingTrips.first);
+                  },
+                ),
+
+                SizedBox(height: 24),
+
+                _buildAnnouncements(),
+
+                SizedBox(height: 30),
+              ],
             ),
-            SizedBox(height: 16),
-            
-            // 4 Beautiful Quick Action Boxes
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: GridView.count(
-                shrinkWrap: true,
-                physics: NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-                childAspectRatio: 1.0,
-                children: [
-                  _buildBeautifulBox(
-                    icon: Icons.confirmation_number_outlined,
-                    title: 'Buy Ticket',
-                    description: 'One-day passes',
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFFD12149), Color(0xFFFF6B6B)],
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => TicketBookingScreen()),
-                      );
-                    },
-                  ),
-                  _buildBeautifulBox(
-                    icon: Icons.schedule_outlined,
-                    title: 'View Schedule',
-                    description: 'Bus timings',
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFFFF8C42), Color(0xFFFFB347)],
-                    ),
-                    onTap: () {
-                      // Navigate to schedule view
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Schedule view coming soon!')),
-                      );
-                    },
-                  ),
-                  _buildBeautifulBox(
-                    icon: Icons.card_membership_outlined,
-                    title: 'Subscribe',
-                    description: 'Monthly plans',
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF2ECC71), Color(0xFF4CD964)],
-                    ),
-                    onTap: () {
-                      // Navigate to subscription plans
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Subscription plans coming soon!')),
-                      );
-                    },
-                  ),
-                  _buildBeautifulBox(
-                    icon: Icons.help_outline,
-                    title: 'Get Help',
-                    description: 'Support 24/7',
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF9B59B6), Color(0xFFC07CF0)],
-                    ),
-                    onTap: () {
-                      _showContactDialog(context);
-                    },
-                    showContact: true,
-                  ),
-                ],
-              ),
-            ),
-            
-            SizedBox(height: 24),
-            
-            // Upcoming Trip Section - Now using Consumer to get real data
-            Consumer<BookingProvider>(
-              builder: (context, provider, child) {
-                if (provider.isLoading) {
-                  return Center(child: CircularProgressIndicator());
-                }
-                
-                // Get upcoming trips from provider
-                var upcomingTrips = provider.userBookings.where((booking) => 
-                  booking.isUpcoming && booking.status != 'cancelled'
-                ).toList();
-                
-                if (upcomingTrips.isEmpty) {
-                  return _buildNoUpcomingTrip();
-                }
-                
-                return _buildUpcomingTrip(upcomingTrips.first);
-              },
-            ),
-            
-            SizedBox(height: 24),
-            
-            // Announcements Section
-            _buildAnnouncements(),
-            
-            SizedBox(height: 30),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -418,8 +478,17 @@ class _HomePageContentState extends State<HomePageContent> {
     }
   }
 
-  // ========== BEAUTIFUL SUBSCRIPTION CARD ==========
-  Widget _buildSubscriptionCard() {
+  Widget _buildSubscriptionCard(DocumentSnapshot? snapshot) {
+    Map<String, dynamic>? data;
+    if (snapshot != null && snapshot.exists) {
+      data = snapshot.data() as Map<String, dynamic>?;
+    }
+
+    String planType = data?['subscriptionType'] ?? 'Monthly Subscription';
+    String expiryDate = data?['subscriptionExpiry'] ?? 'Mar 31, 2026';
+    int daysRemaining = _calculateDaysRemaining(expiryDate);
+    int ridesUsed = data?['ridesUsed'] ?? 0;
+
     return Container(
       margin: EdgeInsets.all(20),
       padding: EdgeInsets.all(20),
@@ -427,10 +496,7 @@ class _HomePageContentState extends State<HomePageContent> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.accentYellow,
-            Color(0xFFFFD54F), // Lighter yellow
-          ],
+          colors: [AppColors.accentYellow, Color(0xFFFFD54F)],
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
@@ -444,7 +510,6 @@ class _HomePageContentState extends State<HomePageContent> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row with decorative element
           Row(
             children: [
               Container(
@@ -453,16 +518,12 @@ class _HomePageContentState extends State<HomePageContent> {
                   color: Colors.white.withOpacity(0.3),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(
-                  Icons.stars,
-                  color: Colors.white,
-                  size: 22,
-                ),
+                child: Icon(Icons.stars, color: Colors.white, size: 22),
               ),
               SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Monthly Subscription',
+                  planType,
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -508,8 +569,7 @@ class _HomePageContentState extends State<HomePageContent> {
             ],
           ),
           SizedBox(height: 20),
-          
-          // Progress indicator
+
           Row(
             children: [
               Expanded(
@@ -517,17 +577,14 @@ class _HomePageContentState extends State<HomePageContent> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '15 days remaining',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
+                      '$daysRemaining days remaining',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                     SizedBox(height: 6),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
                       child: LinearProgressIndicator(
-                        value: 0.5, // 15/30 days
+                        value: daysRemaining / 30,
                         backgroundColor: Colors.white24,
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                         minHeight: 8,
@@ -555,22 +612,28 @@ class _HomePageContentState extends State<HomePageContent> {
             ],
           ),
           SizedBox(height: 20),
-          
-          // Info chips
+
           Row(
             children: [
               Expanded(
-                child: _buildInfoChip(Icons.calendar_today, 'Valid Until', 'Mar 31, 2024'),
+                child: _buildInfoChip(
+                  Icons.calendar_today,
+                  'Valid Until',
+                  expiryDate,
+                ),
               ),
               SizedBox(width: 12),
               Expanded(
-                child: _buildInfoChip(Icons.timer, 'Days Left', '15'),
+                child: _buildInfoChip(
+                  Icons.timer,
+                  'Days Left',
+                  '$daysRemaining',
+                ),
               ),
             ],
           ),
           SizedBox(height: 20),
-          
-          // Renew button
+
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
@@ -584,7 +647,24 @@ class _HomePageContentState extends State<HomePageContent> {
               ],
             ),
             child: ElevatedButton(
-              onPressed: () {},
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SubscriptionPage(
+                      isRenewal: true,
+                      currentPlan: planType,
+                      currentExpiry: expiryDate,
+                      daysRemaining: daysRemaining,
+                      ridesUsed: ridesUsed,
+                    ),
+                  ),
+                );
+
+                if (result == true) {
+                  widget.onSubscriptionChanged();
+                }
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: AppColors.primary,
@@ -596,10 +676,7 @@ class _HomePageContentState extends State<HomePageContent> {
               ),
               child: Text(
                 'Renew Subscription',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
             ),
           ),
@@ -608,7 +685,45 @@ class _HomePageContentState extends State<HomePageContent> {
     );
   }
 
-  // Helper for info chips in subscription card
+  int _calculateDaysRemaining(String expiryDate) {
+    try {
+      List<String> parts = expiryDate.split(' ');
+      if (parts.length >= 3) {
+        String month = parts[0];
+        String day = parts[1].replaceAll(',', '');
+        String year = parts[2];
+
+        Map<String, int> months = {
+          'Jan': 1,
+          'Feb': 2,
+          'Mar': 3,
+          'Apr': 4,
+          'May': 5,
+          'Jun': 6,
+          'Jul': 7,
+          'Aug': 8,
+          'Sep': 9,
+          'Oct': 10,
+          'Nov': 11,
+          'Dec': 12,
+        };
+
+        int monthNum = months[month] ?? 3;
+        DateTime expiryDateTime = DateTime(
+          int.parse(year),
+          monthNum,
+          int.parse(day),
+        );
+        DateTime now = DateTime.now();
+
+        return expiryDateTime.difference(now).inDays.clamp(0, 365);
+      }
+    } catch (e) {
+      print('Error calculating days: $e');
+    }
+    return 15;
+  }
+
   Widget _buildInfoChip(IconData icon, String label, String value) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -623,13 +738,7 @@ class _HomePageContentState extends State<HomePageContent> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 9,
-                ),
-              ),
+              Text(label, style: TextStyle(color: Colors.white70, fontSize: 9)),
               Text(
                 value,
                 style: TextStyle(
@@ -645,7 +754,6 @@ class _HomePageContentState extends State<HomePageContent> {
     );
   }
 
-  // ========== BEAUTIFUL QUICK ACTION BOXES ==========
   Widget _buildBeautifulBox({
     required IconData icon,
     required String title,
@@ -675,7 +783,6 @@ class _HomePageContentState extends State<HomePageContent> {
         ),
         child: Stack(
           children: [
-            // Decorative circles
             Positioned(
               top: -15,
               right: -15,
@@ -700,14 +807,12 @@ class _HomePageContentState extends State<HomePageContent> {
                 ),
               ),
             ),
-            
-            // Content
+
             Padding(
               padding: EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icon with glow
                   Container(
                     padding: EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -718,14 +823,9 @@ class _HomePageContentState extends State<HomePageContent> {
                         width: 1,
                       ),
                     ),
-                    child: Icon(
-                      icon,
-                      color: Colors.white,
-                      size: 28,
-                    ),
+                    child: Icon(icon, color: Colors.white, size: 28),
                   ),
                   Spacer(),
-                  // Title
                   Text(
                     title,
                     style: TextStyle(
@@ -735,7 +835,6 @@ class _HomePageContentState extends State<HomePageContent> {
                     ),
                   ),
                   SizedBox(height: 4),
-                  // Description
                   Text(
                     description,
                     style: TextStyle(
@@ -746,7 +845,10 @@ class _HomePageContentState extends State<HomePageContent> {
                   if (showContact) ...[
                     SizedBox(height: 8),
                     Container(
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(20),
@@ -771,8 +873,7 @@ class _HomePageContentState extends State<HomePageContent> {
                 ],
               ),
             ),
-            
-            // Arrow indicator
+
             Positioned(
               bottom: 12,
               right: 12,
@@ -782,11 +883,7 @@ class _HomePageContentState extends State<HomePageContent> {
                   color: Colors.white.withOpacity(0.3),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  Icons.arrow_forward,
-                  color: Colors.white,
-                  size: 14,
-                ),
+                child: Icon(Icons.arrow_forward, color: Colors.white, size: 14),
               ),
             ),
           ],
@@ -795,7 +892,6 @@ class _HomePageContentState extends State<HomePageContent> {
     );
   }
 
-  // ========== NO UPCOMING TRIP ==========
   Widget _buildNoUpcomingTrip() {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 20),
@@ -813,11 +909,7 @@ class _HomePageContentState extends State<HomePageContent> {
       ),
       child: Column(
         children: [
-          Icon(
-            Icons.directions_bus,
-            size: 50,
-            color: Colors.grey[300],
-          ),
+          Icon(Icons.directions_bus, size: 50, color: Colors.grey[300]),
           SizedBox(height: 12),
           Text(
             'No Upcoming Trips',
@@ -830,10 +922,7 @@ class _HomePageContentState extends State<HomePageContent> {
           SizedBox(height: 4),
           Text(
             'Book your first bus ride now!',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
           SizedBox(height: 16),
           ElevatedButton(
@@ -858,7 +947,6 @@ class _HomePageContentState extends State<HomePageContent> {
     );
   }
 
-  // ========== UPCOMING TRIP SECTION ==========
   Widget _buildUpcomingTrip(BookingModel trip) {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 20),
@@ -933,12 +1021,10 @@ class _HomePageContentState extends State<HomePageContent> {
             ],
           ),
           SizedBox(height: 16),
-          
-          // Trip Details
+
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Route visualization
               Column(
                 children: [
                   Container(
@@ -965,7 +1051,6 @@ class _HomePageContentState extends State<HomePageContent> {
                 ],
               ),
               SizedBox(width: 16),
-              // Trip info
               Expanded(
                 child: Column(
                   children: [
@@ -1036,7 +1121,6 @@ class _HomePageContentState extends State<HomePageContent> {
                       ],
                     ),
                     SizedBox(height: 12),
-                    // Bus details
                     Container(
                       padding: EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -1046,9 +1130,21 @@ class _HomePageContentState extends State<HomePageContent> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _buildTripDetailItem(Icons.directions_bus, 'Bus', trip.busId),
-                          _buildTripDetailItem(Icons.event_seat, 'Seat', trip.seats.join(', ')),
-                          _buildTripDetailItem(Icons.timer, 'Duration', '45 min'),
+                          _buildTripDetailItem(
+                            Icons.directions_bus,
+                            'Bus',
+                            trip.busId,
+                          ),
+                          _buildTripDetailItem(
+                            Icons.event_seat,
+                            'Seat',
+                            trip.seats.join(', '),
+                          ),
+                          _buildTripDetailItem(
+                            Icons.timer,
+                            'Duration',
+                            '45 min',
+                          ),
                         ],
                       ),
                     ),
@@ -1058,13 +1154,11 @@ class _HomePageContentState extends State<HomePageContent> {
             ],
           ),
           SizedBox(height: 16),
-          
-          // Track button
+
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () {
-                // Track bus live
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Live tracking coming soon!')),
                 );
@@ -1094,10 +1188,7 @@ class _HomePageContentState extends State<HomePageContent> {
         SizedBox(height: 4),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 10,
-            color: AppColors.textSecondary,
-          ),
+          style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
         ),
         Text(
           value,
@@ -1111,7 +1202,6 @@ class _HomePageContentState extends State<HomePageContent> {
     );
   }
 
-  // ========== ANNOUNCEMENTS SECTION ==========
   Widget _buildAnnouncements() {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 20),
@@ -1133,17 +1223,13 @@ class _HomePageContentState extends State<HomePageContent> {
                 onPressed: () {},
                 child: Text(
                   'View All',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: AppColors.primary, fontSize: 13),
                 ),
               ),
             ],
           ),
           SizedBox(height: 12),
-          
-          // Discount Announcement (Featured)
+
           Container(
             margin: EdgeInsets.only(bottom: 12),
             padding: EdgeInsets.all(16),
@@ -1151,10 +1237,7 @@ class _HomePageContentState extends State<HomePageContent> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  AppColors.primary,
-                  AppColors.primary.withOpacity(0.8),
-                ],
+                colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
               ),
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
@@ -1173,11 +1256,7 @@ class _HomePageContentState extends State<HomePageContent> {
                     color: Colors.white.withOpacity(0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.discount,
-                    color: Colors.white,
-                    size: 24,
-                  ),
+                  child: Icon(Icons.discount, color: Colors.white, size: 24),
                 ),
                 SizedBox(width: 16),
                 Expanded(
@@ -1196,7 +1275,10 @@ class _HomePageContentState extends State<HomePageContent> {
                           ),
                           SizedBox(width: 8),
                           Container(
-                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.yellow,
                               borderRadius: BorderRadius.circular(12),
@@ -1215,10 +1297,7 @@ class _HomePageContentState extends State<HomePageContent> {
                       SizedBox(height: 4),
                       Text(
                         'Use code STUDENT20. Valid until Apr 30',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
                       ),
                     ],
                   ),
@@ -1226,22 +1305,22 @@ class _HomePageContentState extends State<HomePageContent> {
               ],
             ),
           ),
-          
-          // Regular Announcement 1
+
           _buildAnnouncementItem(
             icon: Icons.access_time,
             iconColor: Colors.orange,
             title: 'Schedule Change Notice',
-            description: 'Morning bus departure time changed to 7:15 AM starting next week.',
+            description:
+                'Morning bus departure time changed to 7:15 AM starting next week.',
             time: '2 hours ago',
           ),
-          
-          // Regular Announcement 2
+
           _buildAnnouncementItem(
             icon: Icons.location_on,
             iconColor: Colors.blue,
             title: 'New Pickup Point Added',
-            description: 'City Centre Bahrain now available as a pickup location.',
+            description:
+                'City Centre Bahrain now available as a pickup location.',
             time: '1 day ago',
           ),
         ],
@@ -1305,18 +1384,11 @@ class _HomePageContentState extends State<HomePageContent> {
                 SizedBox(height: 6),
                 Row(
                   children: [
-                    Icon(
-                      Icons.access_time,
-                      size: 12,
-                      color: Colors.grey,
-                    ),
+                    Icon(Icons.access_time, size: 12, color: Colors.grey),
                     SizedBox(width: 4),
                     Text(
                       time,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey,
-                      ),
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
                     ),
                   ],
                 ),
@@ -1328,7 +1400,6 @@ class _HomePageContentState extends State<HomePageContent> {
     );
   }
 
-  // ========== CONTACT DIALOG ==========
   void _showContactDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -1379,7 +1450,6 @@ class _HomePageContentState extends State<HomePageContent> {
     );
   }
 
-  // ========== LOGOUT DIALOG ==========
   void _showLogoutDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -1390,10 +1460,7 @@ class _HomePageContentState extends State<HomePageContent> {
           ),
           title: Text(
             'Logout',
-            style: TextStyle(
-              color: Colors.red,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
           ),
           content: Text('Are you sure you want to logout?'),
           actions: [
