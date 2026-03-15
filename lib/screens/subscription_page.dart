@@ -46,7 +46,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     {
       'name': 'Quarterly ',
       'price': 'BD 45.00',
-      'period': '3 months one (1 Semester)',
+      'period': '3 months (1 Semester)',
       'duration': 90,
       'savings': '0%',
       'popularity': '5k+ active',
@@ -61,16 +61,16 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     },
     {
       'name': 'Yearly ',
-      'price': 'BD 150.00',
-      'period': 'one year (3 Semesters)',
+      'price': 'BD 120.00',
+      'period': '12 months (3 Semesters)',
       'duration': 365,
       'savings': '17%',
       'popularity': '1.2k+ active',
       'bestFor': 'Daily commuters',
       'features': [
         'All quarterly benefits included',
-        'VIP lounge access at major stations',
-        'Exclusive merchandise discounts',
+        'VIP lounge access',
+        'Merchandise discounts',
       ],
     },
   ];
@@ -206,7 +206,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                             style: TextStyle(fontSize: 11, color: Colors.white),
                           ),
                           Text(
-                            '',
+                            '${widget.daysRemaining ?? 15}',
                             style: const TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -233,7 +233,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                             style: TextStyle(fontSize: 11, color: Colors.white),
                           ),
                           Text(
-                            '/30',
+                            '${widget.ridesUsed ?? 0}/30',
                             style: const TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -266,7 +266,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Valid until: ',
+                      'Valid until: ${widget.currentExpiry ?? 'Mar 31, 2026'}',
                       style: const TextStyle(fontSize: 12, color: Colors.white),
                     ),
                   ],
@@ -377,7 +377,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     );
   }
 
-  // ========== PLAN CARD ==========
+  // ========== PLAN CARD - WITH FIXED POPULAR BADGE ==========
   Widget _buildPlanCard({
     required Map<String, dynamic> plan,
     required int index,
@@ -407,21 +407,29 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
           ],
         ),
         child: Stack(
+          clipBehavior: Clip.none, // Allow badge to overflow
           children: [
             if (plan['isPopular'] == true)
-              const Positioned(top: -10, right: 20, child: _PopularBadge()),
+              Positioned(
+                top: -12,
+                right: 20,
+                child: _buildPopularBadge(),
+              ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Plan Name and Selected Check
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      plan['name'],
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
+                    Expanded(
+                      child: Text(
+                        plan['name'],
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
                     if (isSelected)
@@ -440,46 +448,56 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      plan['price'],
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      plan['period'],
-                      style: const TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(width: 8),
-                    if (plan['savings'] != '0%')
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        child: Text(
-                          'Save ',
+                
+                // Price Row
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        Text(
+                          plan['price'],
                           style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
+                            fontSize: 28,
                             fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
                           ),
                         ),
-                      ),
-                  ],
+                        Text(
+                          '/ ${plan['period']}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        if (plan['savings'] != '0%')
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: Text(
+                              'Save ${plan['savings']}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
+                
+                // Features list
                 ...plan['features']
                     .map<Widget>(
                       (feature) => Padding(
@@ -508,6 +526,8 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                     )
                     .toList(),
                 const SizedBox(height: 16),
+                
+                // Footer with popularity
                 Container(
                   padding: const EdgeInsets.only(top: 16),
                   decoration: BoxDecoration(
@@ -527,7 +547,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'Best for: ',
+                            'Best for: ${plan['bestFor']}',
                             style: const TextStyle(
                               fontSize: 11,
                               color: AppColors.textSecondary,
@@ -537,7 +557,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
+                          horizontal: 8,
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
@@ -545,6 +565,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                           borderRadius: BorderRadius.circular(30),
                         ),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               Icons.people,
@@ -555,7 +576,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                             Text(
                               plan['popularity'],
                               style: const TextStyle(
-                                fontSize: 10,
+                                fontSize: 9,
                                 color: AppColors.primaryDark,
                               ),
                             ),
@@ -569,6 +590,48 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ========== POPULAR BADGE WIDGET ==========
+  Widget _buildPopularBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFB347), Color(0xFFFF8C42)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.star,
+            color: Colors.white,
+            size: 12,
+          ),
+          const SizedBox(width: 4),
+          const Text(
+            'POPULAR',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -792,30 +855,5 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
       'Dec',
     ];
     return months[month - 1];
-  }
-}
-
-// ========== POPULAR BADGE WIDGET ==========
-class _PopularBadge extends StatelessWidget {
-  const _PopularBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color.fromARGB(0, 255, 255, 255),
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: const Text(
-        '',
-        style: TextStyle(
-          color: Color.fromARGB(0, 255, 255, 255),
-          fontSize: 1,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.6,
-        ),
-      ),
-    );
   }
 }

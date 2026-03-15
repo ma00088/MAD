@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/theme.dart';
 import '../providers/booking_provider.dart';
+import '../providers/notification_provider.dart';
 import 'home_screen.dart';
 
 class PaymentScreen extends StatefulWidget {
@@ -879,7 +880,36 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // Payment Processing
+  // ========== ADD NOTIFICATION AFTER SUCCESSFUL PAYMENT ==========
+  Future<void> _addBookingNotification(String bookingId) async {
+    try {
+      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+      
+      // Format date for display
+      String formattedDate = '${widget.date.day}/${widget.date.month}/${widget.date.year}';
+      
+      await notificationProvider.addNotification(
+        title: 'Booking Confirmed',
+        message: 'Your trip from ${widget.fromLocation} to ${widget.toLocation} on $formattedDate at ${widget.time} has been confirmed. Seat${widget.selectedSeats.length > 1 ? 's' : ''}: ${widget.selectedSeats.join(', ')}',
+        type: 'booking',
+        data: {'bookingId': bookingId},
+      );
+      
+      // Also add an upcoming trip reminder (for 1 day before)
+      await notificationProvider.addNotification(
+        title: 'Upcoming Trip Reminder',
+        message: 'You have a trip to ${widget.toLocation} tomorrow at ${widget.time}. Don\'t forget!',
+        type: 'upcoming_trip',
+        data: {'bookingId': bookingId},
+      );
+      
+      print('✅ Booking notifications added successfully');
+    } catch (e) {
+      print('Error adding booking notification: $e');
+    }
+  }
+
+  // Payment Processing (UPDATED)
   Future<void> _processPayment() async {
     // Clear any previous errors
     setState(() {
@@ -955,7 +985,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       // Create booking in Firebase
       final provider = Provider.of<BookingProvider>(context, listen: false);
       
-      bool success = await provider.createBooking(
+      Map<String, dynamic> result = await provider.createBooking(
         userId: user.uid,
         scheduleId: widget.scheduleId!,
         seats: widget.selectedSeats,
@@ -963,12 +993,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
         promoCode: widget.promoCode,
       );
 
-      // Close loading dialog
-      if (mounted) {
-        Navigator.pop(context);
-      }
+      bool success = result['success'];
+      String bookingId = result['bookingId'];
 
       if (success) {
+        // Add notifications with the actual booking ID
+        await _addBookingNotification(bookingId);
+        
+        // Close loading dialog
+        if (mounted) {
+          Navigator.pop(context);
+        }
+        
         // Show success dialog
         if (mounted) {
           showDialog(

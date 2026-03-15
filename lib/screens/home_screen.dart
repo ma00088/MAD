@@ -13,6 +13,8 @@ import 'login_screen.dart';
 import 'subscription_page.dart';
 import 'chatbot_screen.dart';
 import '../models/booking_model.dart';
+import '../providers/notification_provider.dart';
+import '../widgets/notification_dropdown.dart';
 
 class HomeScreen extends StatefulWidget {
   final int? initialTab;
@@ -311,9 +313,8 @@ class _HomePageContentState extends State<HomePageContent> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                hasActiveSubscription
-                    ? _buildSubscriptionCard(snapshot.data)
-                    : SizedBox.shrink(),
+                if (hasActiveSubscription)
+                  _buildSubscriptionCard(snapshot.data),
 
                 SizedBox(height: 20),
 
@@ -345,103 +346,105 @@ class _HomePageContentState extends State<HomePageContent> {
                 ),
                 SizedBox(height: 16),
 
-                Container(
+                // Quick Actions Grid - FIXED Get Help box overflow
+                Padding(
                   padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      int crossAxisCount = constraints.maxWidth > 600 ? 4 : 2;
-                      return GridView.count(
-                        shrinkWrap: true,
-                        physics: NeverScrollableScrollPhysics(),
-                        crossAxisCount: crossAxisCount,
-                        mainAxisSpacing: 16,
-                        crossAxisSpacing: 16,
-                        childAspectRatio: crossAxisCount == 4 ? 1.0 : 1.2,
-                        children: [
-                          _buildBeautifulBox(
-                            icon: Icons.confirmation_number_outlined,
-                            title: 'Buy Ticket',
-                            description: 'One-day passes',
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFFD12149), Color(0xFFFF6B6B)],
+                  child: GridView.count(
+                    shrinkWrap: true,
+                    physics: NeverScrollableScrollPhysics(),
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 16,
+                    crossAxisSpacing: 16,
+                    childAspectRatio: 1.0,
+                    children: [
+                      _buildBeautifulBox(
+                        icon: Icons.confirmation_number_outlined,
+                        title: 'Buy Ticket',
+                        description: 'One-day passes',
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFFD12149), Color(0xFFFF6B6B)],
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => TicketBookingScreen(),
                             ),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => TicketBookingScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          _buildBeautifulBox(
-                            icon: Icons.schedule_outlined,
-                            title: 'View Schedule',
-                            description: 'Bus timings',
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFFFF8C42), Color(0xFFFFB347)],
+                          );
+                        },
+                      ),
+                      _buildBeautifulBox(
+                        icon: Icons.schedule_outlined,
+                        title: 'View Schedule',
+                        description: 'Bus timings',
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFFFF8C42), Color(0xFFFFB347)],
+                        ),
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Schedule view coming soon!'),
                             ),
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Schedule view coming soon!'),
-                                ),
-                              );
-                            },
-                          ),
-                          _buildBeautifulBox(
-                            icon: Icons.card_membership_outlined,
-                            title: 'Subscribe',
-                            description: 'Monthly plans',
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF2ECC71), Color(0xFF4CD964)],
+                          );
+                        },
+                      ),
+                      _buildBeautifulBox(
+                        icon: Icons.card_membership_outlined,
+                        title: 'Subscribe',
+                        description: 'Monthly plans',
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF2ECC71), Color(0xFF4CD964)],
+                        ),
+                        onTap: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  SubscriptionPage(isRenewal: false),
                             ),
-                            onTap: () async {
-                              final result = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      SubscriptionPage(isRenewal: false),
-                                ),
-                              );
+                          );
 
-                              if (result == true) {
-                                widget.onSubscriptionChanged();
-                              }
-                            },
-                          ),
-                          _buildBeautifulBox(
-                            icon: Icons.help_outline,
-                            title: 'Get Help',
-                            description: 'Support 24/7',
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF9B59B6), Color(0xFFC07CF0)],
-                            ),
-                            onTap: () {
-                              _showContactDialog(context);
-                            },
-                            showContact: true,
-                          ),
-                        ],
-                      );
-                    },
+                          if (result == true) {
+                            widget.onSubscriptionChanged();
+                          }
+                        },
+                      ),
+                      _buildBeautifulBox(
+                        icon: Icons.help_outline,
+                        title: 'Get Help',
+                        description: 'Support', // Shortened description
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF9B59B6), Color(0xFFC07CF0)],
+                        ),
+                        onTap: () {
+                          _showContactDialog(context);
+                        },
+                        showContact: true,
+                      ),
+                    ],
                   ),
                 ),
 
                 SizedBox(height: 24),
 
+                // Upcoming Trip Section - No more white box when empty
                 Consumer<BookingProvider>(
                   builder: (context, provider, child) {
                     if (provider.isLoading) {
-                      return Center(child: CircularProgressIndicator());
+                      return Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
                     }
 
                     var upcomingTrips = provider.userBookings
@@ -453,7 +456,7 @@ class _HomePageContentState extends State<HomePageContent> {
                         .toList();
 
                     if (upcomingTrips.isEmpty) {
-                      return _buildNoUpcomingTrip();
+                      return SizedBox.shrink(); // No white box, just nothing
                     }
 
                     return _buildUpcomingTrip(upcomingTrips.first);
@@ -789,6 +792,7 @@ class _HomePageContentState extends State<HomePageContent> {
         ),
         child: Stack(
           children: [
+            // Decorative circles
             Positioned(
               top: -15,
               right: -15,
@@ -814,11 +818,13 @@ class _HomePageContentState extends State<HomePageContent> {
               ),
             ),
 
+            // Content
             Padding(
               padding: EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Icon with glow
                   Container(
                     padding: EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -832,6 +838,7 @@ class _HomePageContentState extends State<HomePageContent> {
                     child: Icon(icon, color: Colors.white, size: 28),
                   ),
                   Spacer(),
+                  // Title
                   Text(
                     title,
                     style: TextStyle(
@@ -841,6 +848,7 @@ class _HomePageContentState extends State<HomePageContent> {
                     ),
                   ),
                   SizedBox(height: 4),
+                  // Description
                   Text(
                     description,
                     style: TextStyle(
@@ -849,26 +857,26 @@ class _HomePageContentState extends State<HomePageContent> {
                     ),
                   ),
                   if (showContact) ...[
-                    SizedBox(height: 8),
+                    SizedBox(height: 4), // Reduced from 8 to 4
                     Container(
                       padding: EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
+                        horizontal: 8,
+                        vertical: 3, // Reduced from 5 to 3
                       ),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(12), // Reduced from 20 to 12
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.phone, color: Colors.white, size: 10),
-                          SizedBox(width: 4),
+                          Icon(Icons.phone, color: Colors.white, size: 8), // Reduced from 10 to 8
+                          SizedBox(width: 2), // Reduced from 4 to 2
                           Text(
                             '1777-2024',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 9,
+                              fontSize: 8, // Reduced from 9 to 8
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -880,6 +888,7 @@ class _HomePageContentState extends State<HomePageContent> {
               ),
             ),
 
+            // Arrow indicator
             Positioned(
               bottom: 12,
               right: 12,
@@ -894,61 +903,6 @@ class _HomePageContentState extends State<HomePageContent> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildNoUpcomingTrip() {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 20),
-      padding: EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 15,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Icon(Icons.directions_bus, size: 50, color: Colors.grey[300]),
-          SizedBox(height: 12),
-          Text(
-            'No Upcoming Trips',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Book your first bus ride now!',
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-          ),
-          SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => TicketBookingScreen()),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-            child: Text('Book a Trip'),
-          ),
-        ],
       ),
     );
   }

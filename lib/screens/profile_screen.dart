@@ -15,7 +15,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String userName = "Loading...";
   String studentId = "Loading...";
   String email = "Loading...";
-  String phone = "Not provided";
   String department = "Not specified";
   int academicYear = 1;
   
@@ -66,7 +65,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           studentId = data['studentId'] ?? 'Not provided';
           department = data['department'] ?? 'Not specified';
           academicYear = data['academicYear'] ?? 1;
-          phone = data['phoneNumber'] ?? 'Not provided';
           
           // Load subscription data
           hasSubscription = data['hasSubscription'] ?? false;
@@ -125,6 +123,95 @@ class _ProfileScreenState extends State<ProfileScreen> {
       MaterialPageRoute(builder: (context) => LoginScreen()),
       (route) => false,
     );
+  }
+
+  // ========== CANCEL SUBSCRIPTION ==========
+  Future<void> _cancelSubscription() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Show confirmation dialog
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            'Cancel Subscription',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: const Text(
+            'Are you sure you want to cancel your subscription?\n\n'
+            'You will lose access to all membership benefits immediately.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('No, Keep It'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Yes, Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    // Show loading indicator
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Update Firestore - set hasSubscription to false
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({
+        'hasSubscription': false,
+        'subscriptionCancelledAt': FieldValue.serverTimestamp(),
+      });
+
+      // Update local state
+      setState(() {
+        hasSubscription = false;
+        membershipStatus = "";
+        membershipType = "";
+        membershipExpiry = "";
+      });
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Subscription cancelled successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      print('Error cancelling subscription: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error cancelling subscription: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -437,17 +524,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         Divider(height: 20),
                         _buildInfoTile(
-                          icon: Icons.phone_outlined,
-                          iconColor: Colors.green,
-                          title: 'Phone Number',
-                          subtitle: phone,
-                          action: Icons.phone_in_talk,
-                          onAction: () {
-                            // Call phone
-                          },
-                        ),
-                        Divider(height: 20),
-                        _buildInfoTile(
                           icon: Icons.badge_outlined,
                           iconColor: Colors.orange,
                           title: 'Student ID',
@@ -670,7 +746,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ========== MEMBERSHIP CARD ==========
+  // ========== MEMBERSHIP CARD WITH CANCEL BUTTON ==========
   
   Widget _buildMembershipCard() {
     return Container(
@@ -733,6 +809,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
+              // ACTIVE badge
               Container(
                 padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
@@ -745,6 +822,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: Colors.green,
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              // CANCEL button
+              SizedBox(width: 8),
+              GestureDetector(
+                onTap: _cancelSubscription,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.cancel_outlined,
+                        color: Colors.white,
+                        size: 12,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

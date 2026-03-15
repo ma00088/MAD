@@ -138,8 +138,8 @@ class BookingProvider extends ChangeNotifier {
     }
   }
 
-  // Create a new booking in Firebase
-  Future<bool> createBooking({
+  // Create a new booking in Firebase - UPDATED to return bookingId
+  Future<Map<String, dynamic>> createBooking({
     required String userId,
     required String scheduleId,
     required List<int> seats,
@@ -172,12 +172,20 @@ class BookingProvider extends ChangeNotifier {
       await loadUserBookings(userId);
       
       _setLoading(false);
-      return true;
+      
+      // Return both success status and bookingId
+      return {
+        'success': true,
+        'bookingId': bookingId,
+      };
     } catch (e) {
       print('🔴 Provider Error creating booking: $e');
       _setError('Failed to create booking: $e');
       _setLoading(false);
-      return false;
+      return {
+        'success': false,
+        'bookingId': null,
+      };
     }
   }
 

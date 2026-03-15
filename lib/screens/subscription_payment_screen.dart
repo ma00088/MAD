@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import '../utils/theme.dart';
+import '../providers/notification_provider.dart';
 
 class SubscriptionPaymentScreen extends StatefulWidget {
   final Map<String, dynamic> selectedPlan;
@@ -481,6 +483,66 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
     );
   }
 
+  // ========== ADD SUBSCRIPTION NOTIFICATION ==========
+  Future<void> _addSubscriptionNotification() async {
+    try {
+      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+      
+      String planName = widget.selectedPlan['name'].toString().trim();
+      String expiryDate = _calculateExpiryDate();
+      
+      await notificationProvider.addNotification(
+        title: 'Subscription Activated',
+        message: 'Your $planName subscription is now active. Valid until $expiryDate. Enjoy unlimited rides!',
+        type: 'subscription',
+        data: {
+          'plan': planName,
+          'expiry': expiryDate,
+        },
+      );
+      
+      // Add a reminder notification for renewal (30 days before expiry for annual, 7 days for monthly)
+      if (widget.selectedPlan['duration'] >= 365) {
+        // Annual plan - remind 30 days before
+        await notificationProvider.addNotification(
+          title: 'Subscription Renewal Reminder',
+          message: 'Your annual subscription will expire in 30 days. Renew now to continue enjoying benefits.',
+          type: 'subscription',
+          data: {
+            'plan': planName,
+            'expiry': expiryDate,
+            'reminder': true,
+          },
+        );
+      } else {
+        // Monthly/Quarterly - remind 7 days before
+        await notificationProvider.addNotification(
+          title: 'Subscription Renewal Reminder',
+          message: 'Your subscription will expire soon. Renew now to avoid interruption.',
+          type: 'subscription',
+          data: {
+            'plan': planName,
+            'expiry': expiryDate,
+            'reminder': true,
+          },
+        );
+      }
+      
+      print('✅ Subscription notifications added successfully');
+    } catch (e) {
+      print('Error adding subscription notification: $e');
+    }
+  }
+
+  String _calculateExpiryDate() {
+    DateTime now = DateTime.now();
+    DateTime newExpiry = now.add(
+      Duration(days: widget.selectedPlan['duration']),
+    );
+    return "${_getMonthName(newExpiry.month)} ${newExpiry.day}, ${newExpiry.year}";
+  }
+
+  // ========== PROCESS PAYMENT (UPDATED) ==========
   Future<void> _processPayment() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -489,64 +551,72 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
     setState(() => _isProcessing = true);
 
     // Simulate payment processing
-    await Future.delayed(Duration(seconds: 3));
+    await Future.delayed(Duration(seconds: 2));
 
-    // Here you would integrate with actual payment gateway
-    // For now, we'll just activate the subscription
-
-    User? user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      DateTime now = DateTime.now();
-      DateTime newExpiry = now.add(
-        Duration(days: widget.selectedPlan['duration']),
-      );
-      String formattedExpiry =
-          "${_getMonthName(newExpiry.month)} ${newExpiry.day}, ${newExpiry.year}";
-
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'hasSubscription': true,
-        'subscriptionType': widget.selectedPlan['name'],
-        'subscriptionExpiry': formattedExpiry,
-        'autoRenewal': true,
-        'ridesUsed': 0,
-        'lastRenewal': FieldValue.serverTimestamp(),
-        'paymentMethod': _selectedPaymentMethod,
-        'email': _emailController.text,
-        'phone': _phoneController.text,
-      }, SetOptions(merge: true));
-
-      setState(() => _isProcessing = false);
-
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: Icon(Icons.check_circle, color: AppColors.primary, size: 50),
-            content: Text(
-              'Payment successful! Subscription activated.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context); // Close dialog
-                  Navigator.pop(context, true); // Return to home with success
-                },
-                child: Text('OK', style: TextStyle(color: AppColors.primary)),
-              ),
-            ],
-          ),
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        DateTime now = DateTime.now();
+        DateTime newExpiry = now.add(
+          Duration(days: widget.selectedPlan['duration']),
         );
+        String formattedExpiry =
+            "${_getMonthName(newExpiry.month)} ${newExpiry.day}, ${newExpiry.year}";
+
+        // Update user subscription in Firestore
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'hasSubscription': true,
+          'subscriptionType': widget.selectedPlan['name'],
+          'subscriptionExpiry': formattedExpiry,
+          'autoRenewal': true,
+          'ridesUsed': 0,
+          'lastRenewal': FieldValue.serverTimestamp(),
+          'paymentMethod': _selectedPaymentMethod,
+          'email': _emailController.text,
+          'phone': _phoneController.text,
+        }, SetOptions(merge: true));
+
+        // Add subscription notification
+        await _addSubscriptionNotification();
+
+        setState(() => _isProcessing = false);
+
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Icon(Icons.check_circle, color: AppColors.primary, size: 50),
+              content: Text(
+                'Payment successful! Subscription activated.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Close dialog
+                    Navigator.pop(context, true); // Return to home with success
+                  },
+                  child: Text('OK', style: TextStyle(color: AppColors.primary)),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        setState(() => _isProcessing = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('You must be logged in')));
       }
-    } else {
+    } catch (e) {
       setState(() => _isProcessing = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('You must be logged in')));
+      ).showSnackBar(SnackBar(content: Text('Payment failed: $e')));
     }
   }
 
