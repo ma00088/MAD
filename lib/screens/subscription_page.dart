@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/theme.dart';
+import 'subscription_payment_screen.dart';
 
 class SubscriptionPage extends StatefulWidget {
   final bool isRenewal;
@@ -758,60 +759,20 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
 
   // ========== PROCESS SUBSCRIPTION ==========
   Future<void> _processSubscription() async {
-    setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 2));
-
     var selectedPlan = _plans[_selectedPlanIndex];
-    User? user = FirebaseAuth.instance.currentUser;
 
-    if (user != null) {
-      DateTime now = DateTime.now();
-      DateTime newExpiry = now.add(Duration(days: selectedPlan['duration']));
-      String formattedExpiry = " , ";
+    // Navigate to payment screen
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            SubscriptionPaymentScreen(selectedPlan: selectedPlan),
+      ),
+    );
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'hasSubscription': true,
-        'subscriptionType': selectedPlan['name'],
-        'subscriptionExpiry': formattedExpiry,
-        'autoRenewal': true,
-        'ridesUsed': 0,
-        'lastRenewal': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      setState(() => _isLoading = false);
-
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: Icon(Icons.check_circle, color: AppColors.primary, size: 50),
-            content: Text(
-              widget.isRenewal
-                  ? 'Subscription renewed successfully!'
-                  : 'Subscription activated successfully!',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context, true);
-                },
-                child: Text('OK', style: TextStyle(color: AppColors.primary)),
-              ),
-            ],
-          ),
-        );
-      }
-    } else {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('You must be logged in')));
+    if (result == true) {
+      // Payment successful, return to home
+      Navigator.pop(context, true);
     }
   }
 

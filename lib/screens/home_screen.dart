@@ -346,14 +346,17 @@ class _HomePageContentState extends State<HomePageContent> {
 
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: GridView.count(
-                    shrinkWrap: true,
-                    physics: NeverScrollableScrollPhysics(),
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 16,
-                    crossAxisSpacing: 16,
-                    childAspectRatio: 1.0,
-                    children: [
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      int crossAxisCount = constraints.maxWidth > 600 ? 4 : 2;
+                      return GridView.count(
+                        shrinkWrap: true,
+                        physics: NeverScrollableScrollPhysics(),
+                        crossAxisCount: crossAxisCount,
+                        mainAxisSpacing: 16,
+                        crossAxisSpacing: 16,
+                        childAspectRatio: crossAxisCount == 4 ? 1.0 : 1.2,
+                        children: [
                       _buildBeautifulBox(
                         icon: Icons.confirmation_number_outlined,
                         title: 'Buy Ticket',
@@ -427,7 +430,8 @@ class _HomePageContentState extends State<HomePageContent> {
                         showContact: true,
                       ),
                     ],
-                  ),
+                  );
+                },
                 ),
 
                 SizedBox(height: 24),
