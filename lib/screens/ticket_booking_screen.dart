@@ -8,6 +8,20 @@ import '../models/bus_model.dart';
 import 'seat_selection_screen.dart';
 
 class TicketBookingScreen extends StatefulWidget {
+  // Optional initial values from schedule view
+  final String? initialFrom;
+  final String? initialTo;
+  final DateTime? initialDate;
+  final String? initialTime;
+
+  const TicketBookingScreen({
+    Key? key,
+    this.initialFrom,
+    this.initialTo,
+    this.initialDate,
+    this.initialTime,
+  }) : super(key: key);
+
   @override
   _TicketBookingScreenState createState() => _TicketBookingScreenState();
 }
@@ -40,6 +54,20 @@ class _TicketBookingScreenState extends State<TicketBookingScreen> {
   void initState() {
     super.initState();
     _loadLocationsFromFirebase();
+    
+    // Set initial values if provided
+    if (widget.initialFrom != null) {
+      _selectedFrom = widget.initialFrom;
+    }
+    if (widget.initialTo != null) {
+      _selectedTo = widget.initialTo;
+    }
+    if (widget.initialDate != null) {
+      _selectedDate = widget.initialDate;
+    }
+    if (widget.initialTime != null) {
+      _selectedTime = widget.initialTime;
+    }
   }
   
   // Load unique locations from Firestore routes
@@ -628,7 +656,7 @@ class _TicketBookingScreenState extends State<TicketBookingScreen> {
   Future<void> _selectDate(BuildContext context, {required bool isReturn}) async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: _selectedDate ?? DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(Duration(days: 365)),
     );

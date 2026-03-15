@@ -12,6 +12,7 @@ import 'ticket_booking_screen.dart';
 import 'login_screen.dart';
 import 'subscription_page.dart';
 import 'chatbot_screen.dart';
+import 'schedule/schedule_main_screen.dart'; // ADD THIS IMPORT
 import '../models/booking_model.dart';
 import '../providers/notification_provider.dart';
 import '../widgets/notification_dropdown.dart';
@@ -346,7 +347,7 @@ class _HomePageContentState extends State<HomePageContent> {
                 ),
                 SizedBox(height: 16),
 
-                // Quick Actions Grid - FIXED Get Help box overflow
+                // Quick Actions Grid
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 20),
                   child: GridView.count(
@@ -385,9 +386,11 @@ class _HomePageContentState extends State<HomePageContent> {
                           colors: [Color(0xFFFF8C42), Color(0xFFFFB347)],
                         ),
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Schedule view coming soon!'),
+                          // UPDATED: Now navigates to the actual schedule screen
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ScheduleMainScreen(),
                             ),
                           );
                         },
@@ -418,7 +421,7 @@ class _HomePageContentState extends State<HomePageContent> {
                       _buildBeautifulBox(
                         icon: Icons.help_outline,
                         title: 'Get Help',
-                        description: 'Support', // Shortened description
+                        description: 'Support',
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
@@ -435,7 +438,7 @@ class _HomePageContentState extends State<HomePageContent> {
 
                 SizedBox(height: 24),
 
-                // Upcoming Trip Section - No more white box when empty
+                // Upcoming Trip Section
                 Consumer<BookingProvider>(
                   builder: (context, provider, child) {
                     if (provider.isLoading) {
@@ -456,7 +459,7 @@ class _HomePageContentState extends State<HomePageContent> {
                         .toList();
 
                     if (upcomingTrips.isEmpty) {
-                      return SizedBox.shrink(); // No white box, just nothing
+                      return SizedBox.shrink();
                     }
 
                     return _buildUpcomingTrip(upcomingTrips.first);
@@ -857,26 +860,26 @@ class _HomePageContentState extends State<HomePageContent> {
                     ),
                   ),
                   if (showContact) ...[
-                    SizedBox(height: 4), // Reduced from 8 to 4
+                    SizedBox(height: 4),
                     Container(
                       padding: EdgeInsets.symmetric(
                         horizontal: 8,
-                        vertical: 3, // Reduced from 5 to 3
+                        vertical: 3,
                       ),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12), // Reduced from 20 to 12
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.phone, color: Colors.white, size: 8), // Reduced from 10 to 8
-                          SizedBox(width: 2), // Reduced from 4 to 2
+                          Icon(Icons.phone, color: Colors.white, size: 8),
+                          SizedBox(width: 2),
                           Text(
                             '1777-2024',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 8, // Reduced from 9 to 8
+                              fontSize: 8,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
