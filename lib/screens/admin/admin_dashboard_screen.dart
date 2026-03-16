@@ -6,6 +6,7 @@ import 'manage_buses_screen.dart';
 import 'manage_routes_screen.dart';
 import 'manage_schedules_screen.dart';
 import 'all_bookings_screen.dart';
+import 'subscriptions_dashboard_screen.dart';  // ADD THIS IMPORT
 import '../login_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -283,6 +284,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(builder: (context) => AllBookingsScreen()),
+                          );
+                        },
+                      ),
+                      // NEW SUBSCRIPTION CARD - ADDED HERE
+                      _buildActionCard(
+                        icon: Icons.card_membership,
+                        title: 'Subscriptions',
+                        color: Colors.teal,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => SubscriptionsDashboardScreen()),
                           );
                         },
                       ),

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/theme.dart';
 import '../models/booking_model.dart';
+import 'home_screen.dart'; // Add this import
 
 class TicketScreen extends StatefulWidget {
   final String? bookingId; // Optional - if provided, show specific ticket, otherwise show latest
@@ -90,38 +91,57 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
+  void _goBack() {
+    // Check if there's something to pop to
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      // If can't pop, go to home screen
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => HomeScreen(initialTab: 1)), // Go to Bookings tab
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: Text(
-          'My E-Ticket',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.bold,
+    return WillPopScope(
+      onWillPop: () async {
+        _goBack();
+        return false;
+      },
+      child: Scaffold(
+        backgroundColor: Colors.grey[50],
+        appBar: AppBar(
+          title: Text(
+            'My E-Ticket',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.refresh, color: AppColors.primary),
-            onPressed: _loadTicket,
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: AppColors.textPrimary),
+            onPressed: _goBack,
           ),
-        ],
+          actions: [
+            IconButton(
+              icon: Icon(Icons.refresh, color: AppColors.primary),
+              onPressed: _loadTicket,
+            ),
+          ],
+        ),
+        body: _isLoading
+            ? _buildLoadingState()
+            : _errorMessage != null
+                ? _buildErrorState()
+                : _booking == null
+                    ? _buildEmptyState()
+                    : _buildTicketContent(),
       ),
-      body: _isLoading
-          ? _buildLoadingState()
-          : _errorMessage != null
-              ? _buildErrorState()
-              : _booking == null
-                  ? _buildEmptyState()
-                  : _buildTicketContent(),
     );
   }
 
@@ -188,6 +208,16 @@ class _TicketScreenState extends State<TicketScreen> {
               ),
               child: Text('Try Again'),
             ),
+            SizedBox(height: 12),
+            TextButton(
+              onPressed: _goBack,
+              child: Text(
+                'Go Back',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -230,9 +260,7 @@ class _TicketScreenState extends State<TicketScreen> {
           ),
           SizedBox(height: 24),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context); // Go back
-            },
+            onPressed: _goBack,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -241,7 +269,7 @@ class _TicketScreenState extends State<TicketScreen> {
               ),
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            child: Text('Book a Trip'),
+            child: Text('Go Back'),
           ),
         ],
       ),
@@ -698,7 +726,6 @@ class _TicketScreenState extends State<TicketScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () {
-                    // Share ticket (you can implement this)
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Share feature coming soon!'),
@@ -721,9 +748,7 @@ class _TicketScreenState extends State<TicketScreen> {
               SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
+                  onPressed: _goBack,
                   icon: Icon(Icons.arrow_back, size: 16),
                   label: Text('Back'),
                   style: ElevatedButton.styleFrom(

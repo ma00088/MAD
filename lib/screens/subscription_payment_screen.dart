@@ -45,6 +45,118 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
     }
   }
 
+  // ========== CREATE SUBSCRIPTION RECORD IN STUDENT_MEMBERSHIPS ==========
+  Future<void> _createSubscriptionRecord(String userId) async {
+    try {
+      DateTime now = DateTime.now();
+      DateTime expiryDate = now.add(Duration(days: widget.selectedPlan['duration']));
+      
+      // Get user details
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+      
+      String studentName = userDoc.get('fullName') ?? 'Student';
+      String studentId = userDoc.get('studentId') ?? '';
+      
+      // Parse price from string (e.g., "BD 15.00" -> 15.00)
+      double price = 0.0;
+      dynamic priceValue = widget.selectedPlan['price'];
+      
+      if (priceValue is String) {
+        // Remove 'BD ' and any commas, then parse
+        String cleanPrice = priceValue.replaceAll('BD ', '').replaceAll(',', '');
+        price = double.parse(cleanPrice);
+      } else if (priceValue is num) {
+        price = priceValue.toDouble();
+      }
+      
+      // Create subscription record
+      await FirebaseFirestore.instance.collection('student_memberships').add({
+        'studentId': userId,
+        'studentName': studentName,
+        'studentIdNumber': studentId,
+        'planName': widget.selectedPlan['name'].toString().trim(),
+        'price': price,
+        'durationDays': widget.selectedPlan['duration'],
+        'startDate': Timestamp.fromDate(now),
+        'endDate': Timestamp.fromDate(expiryDate),
+        'status': 'active',
+        'autoRenewal': true,
+        'paymentMethod': _selectedPaymentMethod,
+        'email': _emailController.text,
+        'phone': _phoneController.text,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      print('✅ Subscription record created in student_memberships');
+    } catch (e) {
+      print('❌ Error creating subscription record: $e');
+      // Don't throw - we still want to show success to user
+    }
+  }
+
+  // ========== ADD SUBSCRIPTION NOTIFICATION ==========
+  Future<void> _addSubscriptionNotification() async {
+    try {
+      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+      
+      String planName = widget.selectedPlan['name'].toString().trim();
+      String expiryDate = _calculateExpiryDate();
+      
+      await notificationProvider.addNotification(
+        title: 'Subscription Activated',
+        message: 'Your $planName subscription is now active. Valid until $expiryDate. Enjoy unlimited rides!',
+        type: 'subscription',
+        data: {
+          'plan': planName,
+          'expiry': expiryDate,
+        },
+      );
+      
+      // Add a reminder notification for renewal (30 days before expiry for annual, 7 days for monthly)
+      if (widget.selectedPlan['duration'] >= 365) {
+        // Annual plan - remind 30 days before
+        await notificationProvider.addNotification(
+          title: 'Subscription Renewal Reminder',
+          message: 'Your annual subscription will expire in 30 days. Renew now to continue enjoying benefits.',
+          type: 'subscription',
+          data: {
+            'plan': planName,
+            'expiry': expiryDate,
+            'reminder': true,
+          },
+        );
+      } else {
+        // Monthly/Quarterly - remind 7 days before
+        await notificationProvider.addNotification(
+          title: 'Subscription Renewal Reminder',
+          message: 'Your subscription will expire soon. Renew now to avoid interruption.',
+          type: 'subscription',
+          data: {
+            'plan': planName,
+            'expiry': expiryDate,
+            'reminder': true,
+          },
+        );
+      }
+      
+      print('✅ Subscription notifications added successfully');
+    } catch (e) {
+      print('Error adding subscription notification: $e');
+    }
+  }
+
+  String _calculateExpiryDate() {
+    DateTime now = DateTime.now();
+    DateTime newExpiry = now.add(
+      Duration(days: widget.selectedPlan['duration']),
+    );
+    return "${_getMonthName(newExpiry.month)} ${newExpiry.day}, ${newExpiry.year}";
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -483,66 +595,7 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
     );
   }
 
-  // ========== ADD SUBSCRIPTION NOTIFICATION ==========
-  Future<void> _addSubscriptionNotification() async {
-    try {
-      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-      
-      String planName = widget.selectedPlan['name'].toString().trim();
-      String expiryDate = _calculateExpiryDate();
-      
-      await notificationProvider.addNotification(
-        title: 'Subscription Activated',
-        message: 'Your $planName subscription is now active. Valid until $expiryDate. Enjoy unlimited rides!',
-        type: 'subscription',
-        data: {
-          'plan': planName,
-          'expiry': expiryDate,
-        },
-      );
-      
-      // Add a reminder notification for renewal (30 days before expiry for annual, 7 days for monthly)
-      if (widget.selectedPlan['duration'] >= 365) {
-        // Annual plan - remind 30 days before
-        await notificationProvider.addNotification(
-          title: 'Subscription Renewal Reminder',
-          message: 'Your annual subscription will expire in 30 days. Renew now to continue enjoying benefits.',
-          type: 'subscription',
-          data: {
-            'plan': planName,
-            'expiry': expiryDate,
-            'reminder': true,
-          },
-        );
-      } else {
-        // Monthly/Quarterly - remind 7 days before
-        await notificationProvider.addNotification(
-          title: 'Subscription Renewal Reminder',
-          message: 'Your subscription will expire soon. Renew now to avoid interruption.',
-          type: 'subscription',
-          data: {
-            'plan': planName,
-            'expiry': expiryDate,
-            'reminder': true,
-          },
-        );
-      }
-      
-      print('✅ Subscription notifications added successfully');
-    } catch (e) {
-      print('Error adding subscription notification: $e');
-    }
-  }
-
-  String _calculateExpiryDate() {
-    DateTime now = DateTime.now();
-    DateTime newExpiry = now.add(
-      Duration(days: widget.selectedPlan['duration']),
-    );
-    return "${_getMonthName(newExpiry.month)} ${newExpiry.day}, ${newExpiry.year}";
-  }
-
-  // ========== PROCESS PAYMENT (UPDATED) ==========
+  // ========== PROCESS PAYMENT ==========
   Future<void> _processPayment() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -563,7 +616,7 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
         String formattedExpiry =
             "${_getMonthName(newExpiry.month)} ${newExpiry.day}, ${newExpiry.year}";
 
-        // Update user subscription in Firestore
+        // 1. Update user subscription in Firestore
         await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
           'hasSubscription': true,
           'subscriptionType': widget.selectedPlan['name'],
@@ -576,7 +629,10 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
           'phone': _phoneController.text,
         }, SetOptions(merge: true));
 
-        // Add subscription notification
+        // 2. CREATE SUBSCRIPTION RECORD IN STUDENT_MEMBERSHIPS COLLECTION
+        await _createSubscriptionRecord(user.uid);
+
+        // 3. Add subscription notification
         await _addSubscriptionNotification();
 
         setState(() => _isProcessing = false);

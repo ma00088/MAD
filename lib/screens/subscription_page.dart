@@ -61,7 +61,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     },
     {
       'name': 'Yearly ',
-      'price': 'BD 120.00',
+      'price': 'BD 150.00', // CHANGED: Updated from 120 to 150 to match 17% savings
       'period': '12 months (3 Semesters)',
       'duration': 365,
       'savings': '17%',

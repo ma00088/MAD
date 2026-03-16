@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/theme.dart';
 import 'login_screen.dart';
 import 'bookings_screen.dart';
+import 'edit_profile_screen.dart'; // Add this import
 
 class ProfileScreen extends StatefulWidget {
   @override
@@ -661,14 +662,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           iconColor: Colors.blue,
                           title: 'Personal Information',
                           subtitle: 'Update your details',
-                          onTap: () {
-                            // Navigate to edit profile
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Edit profile coming soon!'),
-                                backgroundColor: Colors.blue,
+                          onTap: () async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => EditProfileScreen(
+                                  currentName: userName,
+                                  currentEmail: email,
+                                  currentStudentId: studentId,
+                                  currentDepartment: department,
+                                  currentYear: academicYear,
+                                ),
                               ),
                             );
+                            
+                            // If profile was updated, refresh the data
+                            if (result == true) {
+                              _loadUserData();
+                            }
                           },
                         ),
                         Divider(height: 0, indent: 60),

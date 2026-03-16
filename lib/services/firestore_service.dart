@@ -385,4 +385,203 @@ class FirestoreService {
       rethrow;
     }
   }
+
+  // ========== SUBSCRIPTIONS ==========
+  
+  // Create a new subscription
+  Future<String> createSubscription({
+    required String userId,
+    required Map<String, dynamic> plan,
+    required String paymentMethod,
+    required String email,
+    required String phone,
+  }) async {
+    try {
+      DateTime now = DateTime.now();
+      DateTime expiryDate = now.add(Duration(days: plan['duration']));
+      
+      // Get user details
+      DocumentSnapshot userDoc = await _db.collection('users').doc(userId).get();
+      
+      String studentName = userDoc.get('fullName') ?? 'Student';
+      String studentId = userDoc.get('studentId') ?? '';
+      
+      // Parse price from string (e.g., "BD 15.00" -> 15.00)
+      double price = 0.0;
+      dynamic priceValue = plan['price'];
+      
+      if (priceValue is String) {
+        // Remove 'BD ' and any commas, then parse
+        String cleanPrice = priceValue.replaceAll('BD ', '').replaceAll(',', '');
+        price = double.parse(cleanPrice);
+      } else if (priceValue is num) {
+        price = priceValue.toDouble();
+      }
+      
+      // Create subscription record
+      DocumentReference subRef = await _db.collection('student_memberships').add({
+        'studentId': userId,
+        'studentName': studentName,
+        'studentIdNumber': studentId,
+        'planName': plan['name'].toString().trim(),
+        'planDetails': {
+          'name': plan['name'],
+          'price': plan['price'],
+          'period': plan['period'],
+          'duration': plan['duration'],
+          'features': plan['features'],
+        },
+        'price': price,
+        'durationDays': plan['duration'],
+        'startDate': Timestamp.fromDate(now),
+        'endDate': Timestamp.fromDate(expiryDate),
+        'status': 'active',
+        'autoRenewal': true,
+        'paymentMethod': paymentMethod,
+        'email': email,
+        'phone': phone,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      print('✅ FIRESTORE: Subscription created with ID: ${subRef.id}');
+      return subRef.id;
+    } catch (e) {
+      print('❌ FIRESTORE Error creating subscription: $e');
+      throw e;
+    }
+  }
+
+  // Get user's active subscription
+  Future<DocumentSnapshot?> getUserActiveSubscription(String userId) async {
+    try {
+      QuerySnapshot subscriptions = await _db
+          .collection('student_memberships')
+          .where('studentId', isEqualTo: userId)
+          .where('status', isEqualTo: 'active')
+          .orderBy('endDate', descending: false)
+          .limit(1)
+          .get();
+      
+      if (subscriptions.docs.isNotEmpty) {
+        return subscriptions.docs.first;
+      }
+      return null;
+    } catch (e) {
+      print('❌ FIRESTORE Error getting user subscription: $e');
+      return null;
+    }
+  }
+
+  // Get all subscriptions (for admin)
+  Stream<QuerySnapshot> getAllSubscriptions() {
+    return _db
+        .collection('student_memberships')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  // Get active subscriptions count (for admin stats)
+  Future<int> getActiveSubscriptionsCount() async {
+    try {
+      QuerySnapshot snapshot = await _db
+          .collection('student_memberships')
+          .where('status', isEqualTo: 'active')
+          .get();
+      return snapshot.docs.length;
+    } catch (e) {
+      print('❌ FIRESTORE Error getting active subscriptions count: $e');
+      return 0;
+    }
+  }
+
+  // Get expiring soon subscriptions (within 7 days)
+  Future<QuerySnapshot> getExpiringSubscriptions() async {
+    try {
+      DateTime sevenDaysFromNow = DateTime.now().add(Duration(days: 7));
+      
+      return await _db
+          .collection('student_memberships')
+          .where('status', isEqualTo: 'active')
+          .where('endDate', isLessThanOrEqualTo: Timestamp.fromDate(sevenDaysFromNow))
+          .orderBy('endDate')
+          .get();
+    } catch (e) {
+      print('❌ FIRESTORE Error getting expiring subscriptions: $e');
+      return await _db.collection('empty').limit(0).get();
+    }
+  }
+
+  // Cancel subscription
+  Future<void> cancelSubscription(String subscriptionId, {String? reason}) async {
+    try {
+      await _db.collection('student_memberships').doc(subscriptionId).update({
+        'status': 'cancelled',
+        'cancelledAt': FieldValue.serverTimestamp(),
+        'cancellationReason': reason,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Also update user's hasSubscription flag
+      DocumentSnapshot subDoc = await _db.collection('student_memberships').doc(subscriptionId).get();
+      if (subDoc.exists) {
+        String studentId = (subDoc.data() as Map<String, dynamic>)['studentId'];
+        await _db.collection('users').doc(studentId).update({
+          'hasSubscription': false,
+          'subscriptionCancelledAt': FieldValue.serverTimestamp(),
+        });
+      }
+      
+      print('✅ FIRESTORE: Subscription $subscriptionId cancelled');
+    } catch (e) {
+      print('❌ FIRESTORE Error cancelling subscription: $e');
+      throw e;
+    }
+  }
+
+  // Renew subscription
+  Future<void> renewSubscription(String subscriptionId) async {
+    try {
+      DocumentSnapshot subDoc = await _db.collection('student_memberships').doc(subscriptionId).get();
+      if (!subDoc.exists) throw Exception('Subscription not found');
+      
+      Map<String, dynamic> subData = subDoc.data() as Map<String, dynamic>;
+      int duration = subData['durationDays'] ?? 30;
+      
+      DateTime now = DateTime.now();
+      DateTime newEndDate = now.add(Duration(days: duration));
+      
+      await _db.collection('student_memberships').doc(subscriptionId).update({
+        'status': 'active',
+        'startDate': Timestamp.fromDate(now),
+        'endDate': Timestamp.fromDate(newEndDate),
+        'renewedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Update user's subscription expiry
+      String studentId = subData['studentId'];
+      String formattedExpiry = "${_getMonthName(newEndDate.month)} ${newEndDate.day}, ${newEndDate.year}";
+      
+      await _db.collection('users').doc(studentId).update({
+        'hasSubscription': true,
+        'subscriptionExpiry': formattedExpiry,
+        'lastRenewal': FieldValue.serverTimestamp(),
+      });
+      
+      print('✅ FIRESTORE: Subscription $subscriptionId renewed');
+    } catch (e) {
+      print('❌ FIRESTORE Error renewing subscription: $e');
+      throw e;
+    }
+  }
+
+  // Helper method for month names
+  String _getMonthName(int month) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return months[month - 1];
+  }
 }

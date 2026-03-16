@@ -26,17 +26,23 @@ class RouteDetailScreen extends StatefulWidget {
 }
 
 class _RouteDetailScreenState extends State<RouteDetailScreen> {
-  late DateTime _selectedDate;
   List<Map<String, dynamic>> _stops = [];
+  bool _isLoadingStops = false;
+  String _selectedDay = 'All';
+
+  final List<String> _daysOfWeek = ['All', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   @override
   void initState() {
     super.initState();
-    _selectedDate = DateTime.now();
     _loadStops();
   }
 
   Future<void> _loadStops() async {
+    setState(() {
+      _isLoadingStops = true;
+    });
+    
     try {
       QuerySnapshot stopsSnapshot = await FirebaseFirestore.instance
           .collection('bus_stops')
@@ -53,10 +59,45 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
             'time': data['estimatedTimeFromStart'] ?? 0,
           };
         }).toList();
+        _isLoadingStops = false;
       });
     } catch (e) {
-      print('Error loading stops: $e');
+      setState(() {
+        _stops = [];
+        _isLoadingStops = false;
+      });
     }
+  }
+
+  String _formatOperatingDays(List<dynamic>? days) {
+    if (days == null || days.isEmpty) return 'No scheduled days';
+    
+    List<String> daysList = List<String>.from(days);
+    
+    List<String> weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    List<String> weekend = ['Sat', 'Sun'];
+    
+    daysList.sort();
+    
+    if (daysList.length == 5) {
+      List<String> sortedWeekdays = List.from(weekdays)..sort();
+      if (daysList.toString() == sortedWeekdays.toString()) {
+        return 'Weekdays';
+      }
+    }
+    
+    if (daysList.length == 2) {
+      List<String> sortedWeekend = List.from(weekend)..sort();
+      if (daysList.toString() == sortedWeekend.toString()) {
+        return 'Weekend';
+      }
+    }
+    
+    if (daysList.length == 7) {
+      return 'Daily';
+    }
+    
+    return daysList.join(', ');
   }
 
   @override
@@ -141,7 +182,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                       Expanded(
                         child: _buildInfoChip(
                           Icons.route,
-                          '${_stops.length} stops',
+                          _isLoadingStops ? 'Loading...' : '${_stops.length} stops',
                           'Total Stops',
                         ),
                       ),
@@ -151,7 +192,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
               ),
             ),
 
-            // Date Selector
+            // Day Filter
             Container(
               margin: EdgeInsets.all(16),
               padding: EdgeInsets.all(16),
@@ -170,7 +211,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Select Travel Date',
+                    'Filter by Day',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -178,50 +219,41 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                     ),
                   ),
                   SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: () async {
-                      DateTime? picked = await showDatePicker(
-                        context: context,
-                        initialDate: _selectedDate,
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(Duration(days: 90)),
-                      );
-                      if (picked != null) {
-                        setState(() {
-                          _selectedDate = picked;
-                        });
-                      }
-                    },
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _daysOfWeek.map((day) {
+                        return Padding(
+                          padding: EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            label: Text(day),
+                            selected: _selectedDay == day,
+                            onSelected: (selected) {
+                              setState(() {
+                                _selectedDay = day;
+                              });
+                            },
+                            backgroundColor: Colors.grey[100],
+                            selectedColor: AppColors.primary.withOpacity(0.1),
+                            checkmarkColor: AppColors.primary,
+                            labelStyle: TextStyle(
+                              color: _selectedDay == day ? AppColors.primary : AppColors.textSecondary,
+                              fontWeight: _selectedDay == day ? FontWeight.bold : FontWeight.normal,
                             ),
                           ),
-                          Icon(Icons.calendar_today, color: AppColors.primary, size: 20),
-                        ],
-                      ),
+                        );
+                      }).toList(),
                     ),
                   ),
                 ],
               ),
             ),
 
-            // Today's Schedules
-            Container(
-              margin: EdgeInsets.symmetric(horizontal: 16),
+            // Schedules Header
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                "Today's Departures",
+                'Available Schedules',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -231,25 +263,40 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
             ),
             SizedBox(height: 12),
 
+            // Schedules List
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('schedules')
-                  .where('routeId', isEqualTo: FirebaseFirestore.instance.doc('routes/${widget.routeId}'))
                   .where('isActive', isEqualTo: true)
-                  .orderBy('departureTime')
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  return Center(child: Text('Error loading schedules'));
+                  return Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Column(
+                        children: [
+                          Icon(Icons.error_outline, color: Colors.red, size: 48),
+                          SizedBox(height: 16),
+                          Text('Error loading schedules'),
+                        ],
+                      ),
+                    ),
+                  );
                 }
 
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
+                  return Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                      ),
+                    ),
+                  );
                 }
 
-                var schedules = snapshot.data!.docs;
-
-                if (schedules.isEmpty) {
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return Center(
                     child: Padding(
                       padding: EdgeInsets.all(32),
@@ -261,7 +308,76 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                             'No schedules available',
                             style: TextStyle(
                               fontSize: 16,
-                              color: AppColors.textSecondary,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                var allSchedules = snapshot.data!.docs;
+                
+                // Filter schedules manually to match this route
+                var routeSchedules = allSchedules.where((doc) {
+                  var data = doc.data() as Map<String, dynamic>;
+                  var routeIdField = data['routeId'];
+                  
+                  if (routeIdField is DocumentReference) {
+                    return routeIdField.path == 'routes/${widget.routeId}';
+                  } else if (routeIdField is String) {
+                    return routeIdField == widget.routeId || 
+                          routeIdField == 'routes/${widget.routeId}';
+                  }
+                  return false;
+                }).toList();
+
+                if (routeSchedules.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Column(
+                        children: [
+                          Icon(Icons.schedule, size: 48, color: Colors.grey[400]),
+                          SizedBox(height: 16),
+                          Text(
+                            'No schedules available for this route',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                // Apply day filter
+                var filteredSchedules = routeSchedules.where((doc) {
+                  var data = doc.data() as Map<String, dynamic>;
+                  var operatingDays = List<String>.from(data['operatingDays'] ?? []);
+                  
+                  if (_selectedDay == 'All') return true;
+                  return operatingDays.contains(_selectedDay);
+                }).toList();
+
+                if (filteredSchedules.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Column(
+                        children: [
+                          Icon(Icons.schedule, size: 48, color: Colors.grey[400]),
+                          SizedBox(height: 16),
+                          Text(
+                            _selectedDay == 'All'
+                                ? 'No schedules for this route'
+                                : 'No schedules on $_selectedDay',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: AppColors.textPrimary,
                             ),
                           ),
                         ],
@@ -274,155 +390,161 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                   shrinkWrap: true,
                   physics: NeverScrollableScrollPhysics(),
                   padding: EdgeInsets.all(16),
-                  itemCount: schedules.length,
+                  itemCount: filteredSchedules.length,
                   itemBuilder: (context, index) {
-                    var scheduleDoc = schedules[index];
+                    var scheduleDoc = filteredSchedules[index];
                     var scheduleData = scheduleDoc.data() as Map<String, dynamic>;
+                    List<String> operatingDays = List<String>.from(scheduleData['operatingDays'] ?? []);
 
-                    return FutureBuilder<int>(
-                      future: _getAvailableSeats(scheduleDoc.id, _selectedDate),
-                      builder: (context, seatsSnapshot) {
-                        int availableSeats = seatsSnapshot.data ?? 0;
-                        bool isFullyBooked = availableSeats <= 0;
-
-                        return Container(
-                          margin: EdgeInsets.only(bottom: 12),
-                          padding: EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: isFullyBooked ? Colors.red.withOpacity(0.3) : Colors.transparent,
+                    return Container(
+                      margin: EdgeInsets.only(bottom: 12),
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.1),
+                            blurRadius: 5,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          // Time Column
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  scheduleData['departureTime'] ?? '--:--',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                Text(
+                                  scheduleData['arrivalTime'] ?? '--:--',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              // Time
-                              Expanded(
-                                flex: 2,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      scheduleData['departureTime'] ?? '--:--',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                    Text(
-                                      scheduleData['arrivalTime'] ?? '--:--',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
 
-                              // Seats
-                              Expanded(
-                                flex: 2,
-                                child: Column(
-                                  children: [
-                                    Icon(
-                                      Icons.event_seat,
-                                      color: isFullyBooked ? Colors.red : Colors.green,
-                                      size: 20,
+                          // Operating Days
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    _formatOperatingDays(operatingDays),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.blue,
+                                      fontWeight: FontWeight.w500,
                                     ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      isFullyBooked ? 'Full' : '$availableSeats seats',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: isFullyBooked ? Colors.red : Colors.green,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
-                              ),
-
-                              // Price and Book button
-                              Expanded(
-                                flex: 3,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          'BD ${scheduleData['price'] ?? 25}.00',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.primary,
-                                          ),
+                                SizedBox(height: 4),
+                                Wrap(
+                                  spacing: 4,
+                                  children: operatingDays.map((day) {
+                                    bool isSelectedDay = day == _selectedDay && _selectedDay != 'All';
+                                    return Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isSelectedDay 
+                                            ? AppColors.primary 
+                                            : AppColors.primary.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        day,
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          color: isSelectedDay ? Colors.white : AppColors.primary,
+                                          fontWeight: FontWeight.bold,
                                         ),
-                                        SizedBox(height: 4),
-                                        if (!isFullyBooked)
-                                          ElevatedButton(
-                                            onPressed: () {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) => TicketBookingScreen(
-                                                    initialFrom: widget.source,
-                                                    initialTo: widget.destination,
-                                                    initialDate: _selectedDate,
-                                                    initialTime: scheduleData['departureTime'],
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: AppColors.primary,
-                                              foregroundColor: Colors.white,
-                                              minimumSize: Size(80, 30),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(8),
-                                              ),
-                                            ),
-                                            child: Text('Book'),
-                                          )
-                                        else
-                                          Container(
-                                            padding: EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 6,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey[200],
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              'Full',
-                                              style: TextStyle(
-                                                color: Colors.grey[600],
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ],
+                                      ),
+                                    );
+                                  }).toList(),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        );
-                      },
+
+                          // Price and Book button
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  'BD ${scheduleData['price'] ?? 25}.00',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => TicketBookingScreen(
+                                          initialFrom: widget.source,
+                                          initialTo: widget.destination,
+                                          initialTime: scheduleData['departureTime'],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    foregroundColor: Colors.white,
+                                    minimumSize: Size(70, 28),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Book',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     );
                   },
                 );
               },
             ),
 
-            // Bus Stops Section
+            // Bus Stops Section (only show if there are stops)
             if (_stops.isNotEmpty) ...[
               SizedBox(height: 24),
               Container(
@@ -553,51 +675,6 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
         ],
       ),
     );
-  }
-
-  Future<int> _getAvailableSeats(String scheduleId, DateTime date) async {
-    try {
-      // Get bus total seats
-      DocumentSnapshot scheduleDoc = await FirebaseFirestore.instance
-          .collection('schedules')
-          .doc(scheduleId)
-          .get();
-      
-      var scheduleData = scheduleDoc.data() as Map<String, dynamic>;
-      
-      // Get bus details
-      int totalSeats = 40; // Default
-      if (scheduleData['busId'] != null) {
-        DocumentReference busRef = scheduleData['busId'] as DocumentReference;
-        DocumentSnapshot busDoc = await busRef.get();
-        if (busDoc.exists) {
-          totalSeats = (busDoc.data() as Map<String, dynamic>)['totalSeats'] ?? 40;
-        }
-      }
-
-      // Count booked seats for this date
-      String dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-      
-      QuerySnapshot bookings = await FirebaseFirestore.instance
-          .collection('bookings')
-          .where('scheduleId', isEqualTo: FirebaseFirestore.instance.doc('schedules/$scheduleId'))
-          .where('travelDate', isEqualTo: dateStr)
-          .where('bookingStatus', isNotEqualTo: 'cancelled')
-          .get();
-
-      int bookedSeats = 0;
-      for (var doc in bookings.docs) {
-        var data = doc.data() as Map<String, dynamic>;
-        if (data['seats'] != null && data['seats'] is List) {
-          bookedSeats += (data['seats'] as List).length;
-        }
-      }
-
-      return totalSeats - bookedSeats;
-    } catch (e) {
-      print('Error calculating available seats: $e');
-      return 0;
-    }
   }
 
   String _formatTime(int minutesFromStart) {
