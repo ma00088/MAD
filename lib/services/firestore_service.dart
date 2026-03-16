@@ -512,27 +512,38 @@ class FirestoreService {
     }
   }
 
-  // Cancel subscription
+  // Cancel subscription (FIXED - Now updates user document)
   Future<void> cancelSubscription(String subscriptionId, {String? reason}) async {
     try {
+      // First get the subscription to find the student ID
+      DocumentSnapshot subDoc = await _db.collection('student_memberships').doc(subscriptionId).get();
+      
+      if (!subDoc.exists) {
+        throw Exception('Subscription not found');
+      }
+      
+      Map<String, dynamic> subData = subDoc.data() as Map<String, dynamic>;
+      String studentId = subData['studentId'];
+      
+      // Update subscription status
       await _db.collection('student_memberships').doc(subscriptionId).update({
         'status': 'cancelled',
         'cancelledAt': FieldValue.serverTimestamp(),
         'cancellationReason': reason,
+        'cancelledBy': 'admin',
         'updatedAt': FieldValue.serverTimestamp(),
       });
       
-      // Also update user's hasSubscription flag
-      DocumentSnapshot subDoc = await _db.collection('student_memberships').doc(subscriptionId).get();
-      if (subDoc.exists) {
-        String studentId = (subDoc.data() as Map<String, dynamic>)['studentId'];
-        await _db.collection('users').doc(studentId).update({
-          'hasSubscription': false,
-          'subscriptionCancelledAt': FieldValue.serverTimestamp(),
-        });
-      }
+      // Update user's hasSubscription flag
+      await _db.collection('users').doc(studentId).update({
+        'hasSubscription': false,
+        'subscriptionCancelledAt': FieldValue.serverTimestamp(),
+        'subscriptionCancelledBy': 'admin',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
       
-      print('✅ FIRESTORE: Subscription $subscriptionId cancelled');
+      print('✅ FIRESTORE: Subscription $subscriptionId cancelled. User $studentId updated.');
+      
     } catch (e) {
       print('❌ FIRESTORE Error cancelling subscription: $e');
       throw e;

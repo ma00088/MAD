@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/theme.dart';
+import '../../services/firestore_service.dart'; // Add this import
 
 class SubscriptionDetailsScreen extends StatefulWidget {
   final String subscriptionId;
@@ -66,7 +67,7 @@ class _SubscriptionDetailsScreenState extends State<SubscriptionDetailsScreen> {
           'Cancel Subscription',
           style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
         ),
-        content: Text('Are you sure you want to cancel this subscription?'),
+        content: Text('Are you sure you want to cancel this subscription? This will immediately revoke the student\'s benefits.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -86,22 +87,26 @@ class _SubscriptionDetailsScreenState extends State<SubscriptionDetailsScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await FirebaseFirestore.instance
-          .collection('student_memberships')
-          .doc(widget.subscriptionId)
-          .update({
-        'status': 'cancelled',
-        'cancelledBy': 'admin',
-        'cancelledAt': FieldValue.serverTimestamp(),
-      });
+      // Use FirestoreService to cancel subscription (this updates both collections)
+      final firestoreService = FirestoreService();
+      await firestoreService.cancelSubscription(
+        widget.subscriptionId,
+        reason: 'Cancelled by admin',
+      );
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Subscription cancelled'), backgroundColor: Colors.green),
+        SnackBar(
+          content: Text('Subscription cancelled successfully. Student notified.'),
+          backgroundColor: Colors.green,
+        ),
       );
       Navigator.pop(context, true);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Error cancelling subscription: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       setState(() => _isLoading = false);
@@ -121,6 +126,7 @@ class _SubscriptionDetailsScreenState extends State<SubscriptionDetailsScreen> {
     if (newDate != null) {
       setState(() => _isLoading = true);
       try {
+        // Update end date
         await FirebaseFirestore.instance
             .collection('student_memberships')
             .doc(widget.subscriptionId)
@@ -128,11 +134,27 @@ class _SubscriptionDetailsScreenState extends State<SubscriptionDetailsScreen> {
           'endDate': Timestamp.fromDate(newDate),
           'extendedBy': 'admin',
           'extendedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        
+        // Also update user's subscription expiry in users collection
+        String studentId = widget.subscriptionData['studentId'];
+        String formattedExpiry = "${_getMonthName(newDate.month)} ${newDate.day}, ${newDate.year}";
+        
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(studentId)
+            .update({
+          'subscriptionExpiry': formattedExpiry,
+          'updatedAt': FieldValue.serverTimestamp(),
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Subscription extended'), backgroundColor: Colors.green),
+          SnackBar(content: Text('Subscription extended successfully'), backgroundColor: Colors.green),
         );
+        
+        // Refresh the page
+        Navigator.pop(context, true);
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
@@ -141,6 +163,14 @@ class _SubscriptionDetailsScreenState extends State<SubscriptionDetailsScreen> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  String _getMonthName(int month) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return months[month - 1];
   }
 
   @override
