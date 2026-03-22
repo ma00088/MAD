@@ -262,7 +262,7 @@ class BookingProvider extends ChangeNotifier {
         arrivalTime: '03:30 PM',
         fromLocation: 'New York City',
         toLocation: 'DC Union Station',
-        price: 35,
+        price: 1,  // CHANGED: 35 → 1
         rating: 4.5,
       ),
       BusModel(
@@ -273,8 +273,8 @@ class BookingProvider extends ChangeNotifier {
         fromLocation: 'New York City',
         toLocation: 'DC Union Station',
         busClass: 'Comfort Class',
-        price: 25,
-        originalPrice: 35,
+        price: 1,  // CHANGED: 25 → 1
+        originalPrice: 2,  // CHANGED: 35 → 2 (for discount display)
         seatsLeft: 4,
         hasWifi: true,
         rating: 4.2,
@@ -286,7 +286,7 @@ class BookingProvider extends ChangeNotifier {
         arrivalTime: '12:30 PM',
         fromLocation: 'NYC Central Station',
         toLocation: 'DC Union Station',
-        price: 25,
+        price: 1,  // CHANGED: 25 → 1
         seatsLeft: 4,
         hasWifi: true,
         rating: 4.8,

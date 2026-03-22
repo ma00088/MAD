@@ -95,7 +95,7 @@ class BusTile extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // Rating and price
+                  // Rating and price - CHANGED to BD
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -112,15 +112,16 @@ class BusTile extends StatelessWidget {
                       SizedBox(height: 8),
                       if (bus.originalPrice != null)
                         Text(
-                          '\$${bus.originalPrice}',
+                          'BD ${bus.originalPrice}',
                           style: TextStyle(
                             decoration: TextDecoration.lineThrough,
                             color: Colors.grey,
                             fontSize: 12,
                           ),
                         ),
+                      // CHANGED: $ to BD
                       Text(
-                        '\$${bus.price}',
+                        'BD ${bus.price}',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,

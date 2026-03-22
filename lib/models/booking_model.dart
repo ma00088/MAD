@@ -162,9 +162,9 @@ class BookingModel {
       busId = data['scheduleId']?.toString() ?? scheduleId;
     }
     
-    // Calculate total if not provided
-    int totalAmount = toInt(data['totalAmount'] ?? data['total']);
-    int priceAmount = toInt(data['price'] ?? data['ticketPrice'] ?? 25);
+    // Calculate total if not provided - FIXED: Changed default from 25 to 1
+    int totalAmount = toInt(data['totalAmount'] ?? data['total'] ?? 1);
+    int priceAmount = toInt(data['price'] ?? data['ticketPrice'] ?? 1);
     int discountAmount = toInt(data['discount'] ?? data['discountAmount']);
     
     if (totalAmount == 0 && priceAmount > 0) {

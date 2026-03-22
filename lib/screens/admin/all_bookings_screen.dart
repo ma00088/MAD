@@ -347,7 +347,7 @@ class _AllBookingsScreenState extends State<AllBookingsScreen> {
                                 ),
                                 SizedBox(height: 8),
                                 
-                                // Seats and amount
+                                // Seats and amount - CHANGED to BD
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
@@ -372,7 +372,7 @@ class _AllBookingsScreenState extends State<AllBookingsScreen> {
                                         );
                                       }).toList(),
                                     ),
-                                    // Amount
+                                    // Amount - CHANGED: $ to BD
                                     Container(
                                       padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                       decoration: BoxDecoration(
@@ -380,7 +380,7 @@ class _AllBookingsScreenState extends State<AllBookingsScreen> {
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
-                                        '\$${bookingData['amount'] ?? bookingData['totalAmount'] ?? 0}',
+                                        'BD ${bookingData['amount'] ?? bookingData['totalAmount'] ?? 0}',
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.green,

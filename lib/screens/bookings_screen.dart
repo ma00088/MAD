@@ -453,7 +453,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
               Divider(height: 1),
               SizedBox(height: 8),
               
-              // Seats and price - FIXED
+              // Seats and price - FIXED with BD currency
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -499,7 +499,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
                     ),
                   ),
                   
-                  // Price
+                  // Price - CHANGED $ to BD
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -511,7 +511,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
                         ),
                       ),
                       Text(
-                        '\$${booking.total ?? 0}.00',
+                        'BD ${booking.total ?? 0}.00',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,

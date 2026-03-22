@@ -96,7 +96,8 @@ class _AddEditScheduleScreenState extends State<AddEditScheduleScreen> {
         // Set other fields
         _departureTimeController.text = widget.scheduleData!['departureTime'] ?? '';
         _arrivalTimeController.text = widget.scheduleData!['arrivalTime'] ?? '';
-        _priceController.text = (widget.scheduleData!['price'] ?? '25').toString();
+        // CHANGED: Default price from '25' to '1'
+        _priceController.text = (widget.scheduleData!['price'] ?? '1').toString();
         _isActive = _parseIsActive(widget.scheduleData!['isActive']);
         
         // Load operating days
@@ -476,9 +477,9 @@ class _AddEditScheduleScreenState extends State<AddEditScheduleScreen> {
                         ),
                         SizedBox(height: 16),
 
-                        // Price
+                        // Price - UPDATED to BD
                         Text(
-                          'Price (\$)',
+                          'Price (BD)',  // CHANGED: 'Price ($)' → 'Price (BD)'
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
@@ -490,7 +491,7 @@ class _AddEditScheduleScreenState extends State<AddEditScheduleScreen> {
                           controller: _priceController,
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
-                            hintText: 'e.g., 25',
+                            hintText: 'e.g., 1.00',  // CHANGED: 'e.g., 25' → 'e.g., 1.00'
                             prefixIcon: Icon(Icons.attach_money, color: Colors.orange),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),

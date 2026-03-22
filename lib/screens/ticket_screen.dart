@@ -597,7 +597,7 @@ class _TicketScreenState extends State<TicketScreen> {
                             ),
                           ),
                           
-                          // Price
+                          // Price - FIXED: Changed $ to BD
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
@@ -612,7 +612,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                 ),
                                 SizedBox(height: 4),
                                 Text(
-                                  '\$${booking.total}',
+                                  'BD ${booking.total}',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,

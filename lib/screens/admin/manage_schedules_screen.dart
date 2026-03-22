@@ -273,9 +273,10 @@ class _ManageSchedulesScreenState extends State<ManageSchedulesScreen> {
                                       Icons.calendar_today,
                                       _formatDays(scheduleData['operatingDays']),
                                     ),
+                                    // CHANGED: Price from $ to BD, default 25 to 1
                                     _buildInfoChip(
                                       Icons.attach_money,
-                                      '\$${scheduleData['price'] ?? 25}',
+                                      'BD ${scheduleData['price'] ?? 1}',
                                     ),
                                   ],
                                 ),

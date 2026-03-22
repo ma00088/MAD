@@ -41,7 +41,7 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
   List<int> _occupiedSeats = [];
   Map<String, dynamic>? _scheduleData;
   int _totalSeats = 40;
-  double _seatPrice = 25.0;
+  double _seatPrice = 1.0;  // CHANGED: 25.0 → 1.0
   
   // Error state for seat loading
   bool _hasLoadError = false;
@@ -113,8 +113,8 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
         if (busDoc.exists) {
           Map<String, dynamic> busData = busDoc.data() as Map<String, dynamic>;
           _totalSeats = _toInt(busData['totalSeats'], 40);
-          _seatPrice = _toDouble(busData['price'], 25.0);
-          print('✅ Bus details: Total seats: $_totalSeats, Price: $_seatPrice');
+          _seatPrice = _toDouble(busData['price'], 1.0);  // CHANGED: 25.0 → 1.0
+          print('✅ Bus details: Total seats: $_totalSeats, Price: BD $_seatPrice');
         }
       }
 
@@ -455,7 +455,7 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
                       ),
                     ),
           
-          // Bottom Bar with Price and Continue
+          // Bottom Bar with Price and Continue - UPDATED to BD
           Container(
             padding: EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -482,8 +482,9 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
                           color: AppColors.textSecondary,
                         ),
                       ),
+                      // CHANGED: Price to BD
                       Text(
-                        '\$${(_selectedSeats.length * _seatPrice).toStringAsFixed(2)}',
+                        'BD ${(_selectedSeats.length * _seatPrice).toStringAsFixed(2)}',
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,

@@ -367,9 +367,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // Price Breakdown Card
+  // Price Breakdown Card - UPDATED to BD and 1 BD price
   Widget _buildPriceBreakdownCard() {
-    double seatPrice = 25.0;
+    double seatPrice = 1.0;  // CHANGED: 25.0 → 1.0
     double subtotal = widget.passengers * seatPrice;
     double discount = widget.promoCode != null ? subtotal * 0.2 : 0;
     double vat = (subtotal - discount) * 0.1;
@@ -406,19 +406,22 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
           SizedBox(height: 12),
           
-          _buildPriceRow('Ticket Price (x${widget.passengers})', '\$${subtotal.toStringAsFixed(2)}'),
+          // CHANGED: Ticket Price to BD
+          _buildPriceRow('Ticket Price (x${widget.passengers})', 'BD ${subtotal.toStringAsFixed(2)}'),
           SizedBox(height: 6),
           
           if (widget.promoCode != null) ...[
+            // CHANGED: Discount to BD
             _buildPriceRow(
               'Discount (20%)',
-              '-\$${discount.toStringAsFixed(2)}',
+              '-BD ${discount.toStringAsFixed(2)}',
               valueColor: Colors.green,
             ),
             SizedBox(height: 6),
           ],
           
-          _buildPriceRow('VAT (10%)', '\$${vat.toStringAsFixed(2)}'),
+          // CHANGED: VAT to BD
+          _buildPriceRow('VAT (10%)', 'BD ${vat.toStringAsFixed(2)}'),
           SizedBox(height: 8),
           Divider(),
           SizedBox(height: 8),
@@ -434,8 +437,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   color: AppColors.textPrimary,
                 ),
               ),
+              // CHANGED: Total to BD
               Text(
-                '\$${total.toStringAsFixed(2)}',
+                'BD ${total.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
@@ -798,9 +802,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // Bottom Pay Button
+  // Bottom Pay Button - UPDATED to BD
   Widget _buildBottomPayButton() {
-    double seatPrice = 25.0;
+    double seatPrice = 1.0;  // CHANGED: 25.0 → 1.0
     double subtotal = widget.passengers * seatPrice;
     double discount = widget.promoCode != null ? subtotal * 0.2 : 0;
     double vat = (subtotal - discount) * 0.1;
@@ -834,8 +838,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       color: AppColors.textSecondary,
                     ),
                   ),
+                  // CHANGED: Total to BD
                   Text(
-                    '\$${total.toStringAsFixed(2)}',
+                    'BD ${total.toStringAsFixed(2)}',
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
